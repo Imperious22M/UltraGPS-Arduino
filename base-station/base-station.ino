@@ -41,40 +41,61 @@ between the sonar pulse transmission and echo reception to determine distance.
 */
 
 #include <SPI.h>
+//! RF24 library: https://nrf24.github.io/RF24/
 #include <nRF24L01.h>
 #include <RF24.h>
 
-RF24 radio(9, 10); // CE, CSN
+//! Number of receivers in the system
+//! TODO make receiver number actually determine the receivers in the system
+//! for now it is used just as a counter
+constexpr uint8_t recvNum = 6;
+
+//! All other pins are the default for the radio (SPI)
+constexpr uint8_t RF24CE = 9;     //! Radio CE pin
+const uint8_t RF24CSN = 10;       //! Radio CSN pin
+
+RF24 radio(RF24CE, RF24CSN); // CE, CSN
 
 const byte address[6] = "00001";
 
 const int ECHO_PIN[]={A0, A1, A2, A3, A4, A5};
 const int RECV_CNT=6;
 
+//! For testing purposes, mimicks a sequence of ticks
+#define MOCKUP
+
+#ifdef MOCKUP
+//! Mockup variables
+unsigned int baseTick = 8000;
+unsigned int variance = 100;
+#endif
+
 #define TRIGGER_PIN (PIN5)
 #define echo_value() (PINC & 63)
 
 void setup() 
 {
-  unsigned int i;
   
-  Serial.begin(19200);  // tbd probably want faster
+  Serial.begin(19200);  //! TODO: Increase baud rate
   pinMode(TRIGGER_PIN, OUTPUT);
 
-  for(i=0;i<sizeof(ECHO_PIN)/sizeof(ECHO_PIN[0]);i++)
+  for(unsigned int i=0;i<sizeof(ECHO_PIN)/sizeof(ECHO_PIN[0]);i++)
   {
-    //pinMode(ECHO_PIN[i], INPUT_PULLUP);
     pinMode(ECHO_PIN[i], INPUT_PULLUP);
   }
 
+  #ifndef MOCKUP
   if(!radio.begin()){
     while(true){
       Serial.println("Radio is hardware responding...");
     }
-  };
+  }
   radio.openWritingPipe(address);
   radio.setPALevel(RF24_PA_HIGH);
   radio.stopListening();
+  #endif
+  
+
 }
 
 static byte value[100]={0}; 
@@ -141,39 +162,35 @@ void measure_echo_times() {
 
 void loop() 
 { 
- 
- const char message[] = "P";
-    bool success = radio.write(&message, sizeof(message));  // Send message to TX to start pinging
-    //delay(100);
-
-    /*
-    if (success) {
-        Serial.println("Message sent successfully!");
-    } else {
-        Serial.println("Message failed to send!");
-    }     
-    */
-   
-    
-
-
-    //delay(200);
-
-      measure_echo_times();
+  #ifndef MOCKUP
+  const char message[] = "P";
+  bool success = radio.write(&message, sizeof(message));  // Send message to TX to start pinging
+  /*
+  if (success) {
+      Serial.println("Message sent successfully!");
+  } else {
+      Serial.println("Message failed to send!");
+  }     
+  */
+  measure_echo_times();
   
- //Serial.print("2000, 7000, ");
-/*for (int i= 0; i<nwp; i++)
-{ Serial.print(ticks[i]/10000); Serial.print(", ");
- Serial.println(value[i]);
- }
- 
- Serial.println("0,0 \n 0,0 \n 0,0");*/
- Serial.print(this_ticks[0]);   Serial.print(", ");
- Serial.print(this_ticks[1]);   Serial.print(", ");
- Serial.print(this_ticks[2]);   Serial.print(", ");
- Serial.print(this_ticks[3]);   Serial.print(", ");
- Serial.print(this_ticks[4]);   Serial.print(", ");
- Serial.println(this_ticks[5]); 
+  Serial.print(this_ticks[0]);   Serial.print(", ");
+  Serial.print(this_ticks[1]);   Serial.print(", ");
+  Serial.print(this_ticks[2]);   Serial.print(", ");
+  Serial.print(this_ticks[3]);   Serial.print(", ");
+  Serial.print(this_ticks[4]);   Serial.print(", ");
+  Serial.println(this_ticks[5]); 
+  
+  #else
+
+  for(int x=0;x<recvNum;x++){
+    Serial.print( baseTick+(rand()%variance) );   
+    if(x!=(recvNum-1)){
+      Serial.print(", ");
+    }
+  }
+  Serial.println();
+  #endif
 }
 
 
