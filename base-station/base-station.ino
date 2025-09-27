@@ -41,61 +41,68 @@ between the sonar pulse transmission and echo reception to determine distance.
 */
 
 #include <SPI.h>
-//! RF24 library: https://nrf24.github.io/RF24/
+//! https://nrf24.github.io/RF24/ 
+//! Library used
 #include <nRF24L01.h>
 #include <RF24.h>
+#include <RF24_config.h>
+#include <printf.h>
 
-//! Number of receivers in the system
-//! TODO make receiver number actually determine the receivers in the system
-//! for now it is used just as a counter
-constexpr uint8_t recvNum = 6;
+//! Base Station Parameters
+constexpr uint8_t CE_PIN = 9;  
+constexpr uint8_t CSN_PIN = 10;
+constexpr uint8_t TRIGGER_PIN = 5;
+constexpr char*   TRANSMITTER_STATION_ID = "A1";        //! Identifies which transmission station is being targetted
+constexpr unsigned int TRIGGER_HIGH_DURATION = 875;     //! How long to hold the high state of the trigger pin
+constexpr uint8_t ECHO_PIN[]={A0, A1, A2, A3, A4, A5};  //! List of all the receivers ultrasonic echo pins
+//! Number of receivers being used
+constexpr uint8_t RECV_CNT = sizeof(ECHO_PIN)/sizeof(ECHO_PIN[0]); 
+#define echo_value() (PINC & 63)                        //! Macro to isolate certain pins in PORTC
 
-//! All other pins are the default for the radio (SPI)
-constexpr uint8_t RF24CE = 9;     //! Radio CE pin
-const uint8_t RF24CSN = 10;       //! Radio CSN pin
+//! Radio Parameters
+constexpr byte  RADIO_ADDRESS[6] = "abcde";             //! Radio channel ID to use, this must match the ID used in the transmitter station
 
-RF24 radio(RF24CE, RF24CSN); // CE, CSN
+//! Tuning Parameters
 
-const byte address[6] = "00001";
+//! How long to wait between transmissions, if this is too short
+//! the transmitter and base station transmit pins will fall out of sync
+//! because of the time it takes for the base station to
+//! wait for the ACK packet.
+constexpr uint16_t  TRANSMIT_DELAY = 100;             
 
-const int ECHO_PIN[]={A0, A1, A2, A3, A4, A5};
-const int RECV_CNT=6;
+//! Debuging Flag
+//! Only uncomment if debugging the arduino program
+#define DEBUG
 
-//! For testing purposes, mimicks a sequence of ticks
-#define MOCKUP
-
-#ifdef MOCKUP
-//! Mockup variables
-unsigned int baseTick = 8000;
-unsigned int variance = 100;
-#endif
-
-#define TRIGGER_PIN (PIN5)
-#define echo_value() (PINC & 63)
+RF24 radio(CE_PIN, CSN_PIN); // CE, CSN
 
 void setup() 
 {
   
-  Serial.begin(19200);  //! TODO: Increase baud rate
+  Serial.begin(19200);
+  printf_begin();
+  Serial.println("Started");
+
   pinMode(TRIGGER_PIN, OUTPUT);
 
-  for(unsigned int i=0;i<sizeof(ECHO_PIN)/sizeof(ECHO_PIN[0]);i++)
+  for(uint8_t i=0; i < RECV_CNT ;i++)
   {
     pinMode(ECHO_PIN[i], INPUT_PULLUP);
   }
 
-  #ifndef MOCKUP
-  if(!radio.begin()){
-    while(true){
-      Serial.println("Radio is hardware responding...");
-    }
-  }
-  radio.openWritingPipe(address);
-  radio.setPALevel(RF24_PA_HIGH);
-  radio.stopListening();
-  #endif
-  
+  while(!radio.begin()){
+      //! If radio fails to start, flash the built-in LED
+      //! and print an error message
+      Serial.println("Radio is not hardware responding...");
+  };
 
+  radio.setPALevel(RF24_PA_LOW);
+  radio.stopListening();
+  radio.openWritingPipe(RADIO_ADDRESS);
+  
+  //! Print the radio details
+  radio.printDetails();
+  delay(1000);
 }
 
 static byte value[100]={0}; 
@@ -109,7 +116,7 @@ void measure_echo_times() {
   register unsigned long my_ticks;
   unsigned int i;
   
-  unsigned int max, j;
+  unsigned int max, j
   byte bits;
   const char text[] = "Ping\n";
 
@@ -121,7 +128,9 @@ void measure_echo_times() {
        digitalWrite(TRIGGER_PIN, HIGH); 
        digitalWrite(TRIGGER_PIN, HIGH);
        digitalWrite(TRIGGER_PIN, HIGH);
+       delayMicroseconds(875);
        digitalWrite(TRIGGER_PIN, LOW); 
+      
  
        for(my_ticks=0;my_ticks < 0x31000; my_ticks++)
        {
@@ -162,39 +171,32 @@ void measure_echo_times() {
 
 void loop() 
 { 
-  #ifndef MOCKUP
-  const char message[] = "P";
-  bool success = radio.write(&message, sizeof(message));  // Send message to TX to start pinging
-  /*
+ 
+  bool success = radio.write(TRANSMITTER_STATION_ID, sizeof(TRANSMITTER_STATION_ID));  // Send message to TX to start pinging
+
+  #ifdef DEBUG
   if (success) {
       Serial.println("Message sent successfully!");
   } else {
       Serial.println("Message failed to send!");
-  }     
-  */
+  }  
+  #endif
+  
+  //! Measure the ultrasonic receive times
   measure_echo_times();
   
+ // Serial.println("0,0 \n 0,0 \n 0,0");*/
   Serial.print(this_ticks[0]);   Serial.print(", ");
   Serial.print(this_ticks[1]);   Serial.print(", ");
   Serial.print(this_ticks[2]);   Serial.print(", ");
   Serial.print(this_ticks[3]);   Serial.print(", ");
   Serial.print(this_ticks[4]);   Serial.print(", ");
   Serial.println(this_ticks[5]); 
-  
-  #else
 
-  for(int x=0;x<recvNum;x++){
-    Serial.print( baseTick+(rand()%variance) );   
-    if(x!=(recvNum-1)){
-      Serial.print(", ");
-    }
-  }
-  Serial.println();
-  #endif
+  //! Delay to prevent the transmit station from being overwhelmed
+  delay(TRANSMIT_DELAY);
 }
 
 
 ///////////////////////////
-
-
 
