@@ -53,7 +53,7 @@ constexpr uint8_t CE_PIN = 9;
 constexpr uint8_t CSN_PIN = 10;
 constexpr uint8_t TRIGGER_PIN = 5;
 constexpr char*   TRANSMITTER_STATION_ID = "A1";        //! Identifies which transmission station is being targetted
-constexpr unsigned int TRIGGER_HIGH_DURATION = 875;     //! How long to hold the high state of the trigger pin
+constexpr unsigned int TRIGGER_HIGH_DURATION = 300;     //! How long to hold the high state of the trigger pin
 constexpr uint8_t ECHO_PIN[]={A0, A1, A2, A3, A4, A5};  //! List of all the receivers ultrasonic echo pins
 //! Number of receivers being used
 constexpr uint8_t RECV_CNT = sizeof(ECHO_PIN)/sizeof(ECHO_PIN[0]); 
@@ -68,11 +68,11 @@ constexpr byte  RADIO_ADDRESS[6] = "abcde";             //! Radio channel ID to 
 //! the transmitter and base station transmit pins will fall out of sync
 //! because of the time it takes for the base station to
 //! wait for the ACK packet.
-constexpr uint16_t  TRANSMIT_DELAY = 100;             
+constexpr uint16_t  TRANSMIT_DELAY = 200;             
 
 //! Debuging Flag
 //! Only uncomment if debugging the arduino program
-#define DEBUG
+//#define DEBUG
 
 RF24 radio(CE_PIN, CSN_PIN); // CE, CSN
 
@@ -116,7 +116,7 @@ void measure_echo_times() {
   register unsigned long my_ticks;
   unsigned int i;
   
-  unsigned int max, j
+  unsigned int max, j;
   byte bits;
   const char text[] = "Ping\n";
 
@@ -128,7 +128,7 @@ void measure_echo_times() {
        digitalWrite(TRIGGER_PIN, HIGH); 
        digitalWrite(TRIGGER_PIN, HIGH);
        digitalWrite(TRIGGER_PIN, HIGH);
-       delayMicroseconds(875);
+       delayMicroseconds(TRIGGER_HIGH_DURATION);
        digitalWrite(TRIGGER_PIN, LOW); 
       
  
@@ -185,13 +185,17 @@ void loop()
   //! Measure the ultrasonic receive times
   measure_echo_times();
   
- // Serial.println("0,0 \n 0,0 \n 0,0");*/
   Serial.print(this_ticks[0]);   Serial.print(", ");
   Serial.print(this_ticks[1]);   Serial.print(", ");
   Serial.print(this_ticks[2]);   Serial.print(", ");
   Serial.print(this_ticks[3]);   Serial.print(", ");
   Serial.print(this_ticks[4]);   Serial.print(", ");
-  Serial.println(this_ticks[5]); 
+  Serial.println(this_ticks[5]);   
+  
+  
+  
+  // Serial.println("0,0 \n 0,0 \n 0,0");*/
+
 
   //! Delay to prevent the transmit station from being overwhelmed
   delay(TRANSMIT_DELAY);

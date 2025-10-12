@@ -11,10 +11,10 @@ constexpr uint8_t CE_PIN = 9;
 constexpr uint8_t CSN_PIN = 10;
 constexpr uint8_t TRIGGER_PIN = 5;
 constexpr char*   STATION_ID = "A1";                  //! A null-terminated string identifying this transmitter station
-constexpr unsigned int TRIGGER_HIGH_DURATION = 875;   //! How long to hold the high state of the trigger pin
+constexpr unsigned int TRIGGER_HIGH_DURATION = 300;   //! How long to hold the high state of the trigger pin
 
 //! Tuning Parameters
-constexpr unsigned int RECEIVE_DELAY = 10500;         //! Microsecond tuning delay after receiving ping message (MUST BE CALIBRATED) 
+constexpr unsigned int RECEIVE_DELAY = 10130;         //! Microsecond tuning delay after receiving ping message (MUST BE CALIBRATED) 
 
 RF24 radio(CE_PIN, CSN_PIN); // CE, CSN
 const byte address[6] = "abcde";
@@ -54,6 +54,7 @@ void loop() {
   if (radio.available()) {
       char receivedMessage[32] = "";
       radio.read(&receivedMessage, sizeof(receivedMessage));
+      //radio.flush_rx();
       //! Prevent interrupts to minimize chance of anything interferring with 
       //! time-critical functions (trigger pin)
       noInterrupts();
@@ -71,7 +72,7 @@ void loop() {
       Serial.print("Received: ");
       Serial.println(receivedMessage);
       #endif
-  
+      noInterrupts();
       //! Trigger if the station id in the message matches our
       //! station ID. It will only match up to 3 characters
       if (strncmp(receivedMessage, STATION_ID, 3) == 0) {
