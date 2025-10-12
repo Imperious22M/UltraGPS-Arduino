@@ -123,7 +123,6 @@ void measure_echo_times() {
   nwp=0;
   this_value=previous_value=0;
 
-    delay(10);
     noInterrupts();
        digitalWrite(TRIGGER_PIN, HIGH); 
        digitalWrite(TRIGGER_PIN, HIGH);
