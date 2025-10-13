@@ -81,7 +81,9 @@ void setup()
   
   Serial.begin(19200);
   printf_begin();
+  #ifdef DEBUG
   Serial.println("Started");
+  #endif
 
   pinMode(TRIGGER_PIN, OUTPUT);
 
@@ -100,8 +102,10 @@ void setup()
   radio.stopListening();
   radio.openWritingPipe(RADIO_ADDRESS);
   
+  #ifdef DEBUG
   //! Print the radio details
   radio.printDetails();
+  #endif
   delay(1000);
 }
 
