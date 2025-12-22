@@ -1,7 +1,9 @@
 /*
-* C code running on an Arduino to generate matlab data -- units of the outputs is counts
+C++ program to control the base station of the UltraGPS system. Sends a radio pulse when 
+to initiate the ultrasonic ping that is then received by the set of receivers. The program
+returns the tick count of all the receivers after the radio pulse is sent.
 
-example:
+Example progam output:
 4404, 3226, 4063, 4041, 3133, 4109
 ::
 ::
@@ -12,7 +14,7 @@ definitely have an Ax+B type of offset where x is the count value, A is the scal
 from counts to distance (or time) and B is the scaling offset necessary to adjust for counts 
 not starting exactly at zero.
 
-These values are output by the Arduino serially at 250000 baud and thus can be recieved by
+These values are output by the Arduino serially at X (set in the setup function) baud and thus can be recieved by
 another program such as matlab.
 ----------
 
@@ -34,9 +36,9 @@ Frequency measurement – Counting pulses within a known time window to determin
 
 Timestamping events – Logging counts to mark when events occur relative to a reference time.
 
-Since your Raspberry Pi project deals with sonar-based distances, "counts" could be 
-used in time-of-flight (ToF) calculations, where the system counts clock cycles 
-between the sonar pulse transmission and echo reception to determine distance.
+"counts" could be used in time-of-flight (ToF) calculations, where the system 
+counts clock cycles between the sonar pulse transmission and echo reception to 
+determine distance.
 
 */
 
@@ -53,11 +55,13 @@ constexpr uint8_t CE_PIN = 9;
 constexpr uint8_t CSN_PIN = 10;
 constexpr uint8_t TRIGGER_PIN = 5;
 constexpr char*   TRANSMITTER_STATION_ID = "A1";        //! Identifies which transmission station is being targetted
-constexpr unsigned int TRIGGER_HIGH_DURATION = 300;     //! How long to hold the high state of the trigger pin
+constexpr unsigned int TRIGGER_HIGH_DURATION = 300;     //! How long to hold the high state of the trigger pin (microseconds)
 constexpr uint8_t ECHO_PIN[]={A0, A1, A2, A3, A4, A5};  //! List of all the receivers ultrasonic echo pins
 //! Number of receivers being used
 constexpr uint8_t RECV_CNT = sizeof(ECHO_PIN)/sizeof(ECHO_PIN[0]); 
 #define echo_value() (PINC & 63)                        //! Macro to isolate certain pins in PORTC
+//! Serial Communication Parammters
+constexpr unsigned int BAUD_RATE = 19200;
 
 //! Radio Parameters
 constexpr byte  RADIO_ADDRESS[6] = "abcde";             //! Radio channel ID to use, this must match the ID used in the transmitter station
@@ -72,14 +76,14 @@ constexpr uint16_t  TRANSMIT_DELAY = 200;
 
 //! Debuging Flag
 //! Only uncomment if debugging the arduino program
-//#define DEBUG
+#define DEBUG
 
 RF24 radio(CE_PIN, CSN_PIN); // CE, CSN
 
 void setup() 
 {
-  
-  Serial.begin(19200);
+  //! Serial setup
+  Serial.begin(BAUD_RATE);
   printf_begin();
   #ifdef DEBUG
   Serial.println("Started");
@@ -174,36 +178,39 @@ void measure_echo_times() {
 
 void loop() 
 { 
- 
-  bool success = radio.write(TRANSMITTER_STATION_ID, sizeof(TRANSMITTER_STATION_ID));  // Send message to TX to start pinging
+  //! Only send a message if a ping is requested using the serial line
+  if (Serial.available() > 0) {
+    // Read the incoming byte
+    char incomingByte = Serial.read();
+    
+    // Trigger a pulse only if 'P'  is received
+    if (incomingByte == 'P') {
+        // Send message to TX to start pinging
+        bool success = radio.write(TRANSMITTER_STATION_ID, sizeof(TRANSMITTER_STATION_ID));  
 
-  #ifdef DEBUG
-  if (success) {
-      Serial.println("Message sent successfully!");
-  } else {
-      Serial.println("Message failed to send!");
-  }  
-  #endif
-  
-  //! Measure the ultrasonic receive times
-  measure_echo_times();
-  
-  Serial.print(this_ticks[0]);   Serial.print(", ");
-  Serial.print(this_ticks[1]);   Serial.print(", ");
-  Serial.print(this_ticks[2]);   Serial.print(", ");
-  Serial.print(this_ticks[3]);   Serial.print(", ");
-  Serial.print(this_ticks[4]);   Serial.print(", ");
-  Serial.println(this_ticks[5]);   
-  
-  
-  
-  // Serial.println("0,0 \n 0,0 \n 0,0");*/
+        #ifdef DEBUG
+        if (success) {
+            Serial.println("Message sent successfully!");
+        } else {
+            Serial.println("Message failed to send!");
+        }  
+        #endif
+        
+        //! Measure the ultrasonic receive times
+        measure_echo_times();
+        Serial.print(this_ticks[0]);   Serial.print(", ");
+        Serial.print(this_ticks[1]);   Serial.print(", ");
+        Serial.print(this_ticks[2]);   Serial.print(", ");
+        Serial.print(this_ticks[3]);   Serial.print(", ");
+        Serial.print(this_ticks[4]);   Serial.print(", ");
+        Serial.println(this_ticks[5]);
+        //! Delay to prevent the transmit station from being overwhelmed
+        delay(TRANSMIT_DELAY);
+      }
 
+    }
 
-  //! Delay to prevent the transmit station from being overwhelmed
-  delay(TRANSMIT_DELAY);
 }
-
 
 ///////////////////////////
 
