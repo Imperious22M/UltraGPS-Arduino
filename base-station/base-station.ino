@@ -57,6 +57,16 @@ constexpr uint8_t TRIGGER_PIN = 5;
 constexpr char*   TRANSMITTER_STATION_ID = "A1";        //! Identifies which transmission station is being targetted
 constexpr unsigned int TRIGGER_HIGH_DURATION = 300;     //! How long to hold the high state of the trigger pin (microseconds)
 constexpr uint8_t ECHO_PIN[]={A0, A1, A2, A3, A4, A5};  //! List of all the receivers ultrasonic echo pins
+constexpr struct {
+    //! On the PCB these map from STAT_LED_1 to LED_5
+    uint8_t STAT_1  = 3; 
+    uint8_t STAT_2 = 4;    
+    uint8_t STAT_3 = 6;
+    uint8_t PULSE_TRIG = 7;     //! Ultrasonic Pulse (STAT_2)
+    uint8_t RADIO_STATUS = 8;   //! Radio Conn Status (STAT_1)
+    //! Number of status pins
+    uint8_t COUNT = 5;
+}STAT_LEDS_PIN;                                         //! List of all the pins for each status LED
 //! Number of receivers being used
 constexpr uint8_t RECV_CNT = sizeof(ECHO_PIN)/sizeof(ECHO_PIN[0]); 
 #define echo_value() (PINC & 63)                        //! Macro to isolate certain pins in PORTC
@@ -96,11 +106,25 @@ void setup()
     pinMode(ECHO_PIN[i], INPUT_PULLUP);
   }
 
+  //! Initialize all status LED pins
+  pinMode(STAT_LEDS_PIN.STAT_1, OUTPUT);
+  pinMode(STAT_LEDS_PIN.STAT_2, OUTPUT);
+  pinMode(STAT_LEDS_PIN.STAT_3, OUTPUT);
+  pinMode(STAT_LEDS_PIN.PULSE_TRIG, OUTPUT);
+  pinMode(STAT_LEDS_PIN.RADIO_STATUS, OUTPUT);
+
   while(!radio.begin()){
-      //! If radio fails to start, flash the built-in LED
+      //! If radio fails to start, flash the RADIO_STATUS LED
       //! and print an error message
       Serial.println("Radio is not hardware responding...");
+      digitalWrite(STAT_LEDS_PIN.RADIO_STATUS, HIGH);
+      delay(100);
+      digitalWrite(STAT_LEDS_PIN.RADIO_STATUS, LOW);
+      delay(100);
   };
+  
+  //! Radio initialized successfully - keep RADIO_STATUS LED on
+  digitalWrite(STAT_LEDS_PIN.RADIO_STATUS, HIGH);
 
   radio.setPALevel(RF24_PA_LOW);
   radio.stopListening();
@@ -110,9 +134,11 @@ void setup()
   //! Print the radio details
   radio.printDetails();
   #endif
+
   delay(1000);
 }
 
+//! Global variables for echo times
 static byte value[100]={0}; 
 static unsigned long ticks[100]={0};
 static unsigned long this_ticks[6];
@@ -175,6 +201,25 @@ void measure_echo_times() {
  }
 }
 
+void simulate_echo_times() {
+  //! Simulate all 6 receivers with values centered around 3000
+  //! Add small variations to make it more realistic
+  constexpr unsigned long BASE_COUNT = 3000;
+  constexpr int VARIATION = 200;  // ±200 counts variation
+  
+  //! Generate simulated values with slight variations for each receiver
+  //! Using a simple pattern to create realistic-looking variations
+  static unsigned long counter = 0;
+  counter++;
+  
+  for(uint8_t i = 0; i < RECV_CNT; i++) {
+    //! Create a pattern-based variation that changes slightly each call
+    //! Each receiver gets a different offset based on its index
+    int offset = ((i * 47) + (counter * 13)) % (VARIATION * 2) - VARIATION;
+    this_ticks[i] = BASE_COUNT + offset;
+  }
+}
+
 
 void loop() 
 { 
@@ -187,6 +232,12 @@ void loop()
     if (incomingByte == 'P') {
         // Send message to TX to start pinging
         bool success = radio.write(TRANSMITTER_STATION_ID, sizeof(TRANSMITTER_STATION_ID));  
+
+        if(success) {
+          digitalWrite(STAT_LEDS_PIN.PULSE_TRIG, HIGH);
+        } else {
+          digitalWrite(STAT_LEDS_PIN.PULSE_TRIG, LOW);
+        }
 
         #ifdef DEBUG
         if (success) {
@@ -206,9 +257,38 @@ void loop()
         Serial.println(this_ticks[5]);
         //! Delay to prevent the transmit station from being overwhelmed
         delay(TRANSMIT_DELAY);
-      }
-
     }
+    //! Simulation mode triggered by 'S'
+    else if (incomingByte == 'S') {
+        #ifdef DEBUG
+        Serial.println("Simulation mode activated");
+        #endif
+        
+        //! Turn on pulse LED to mimic real ping
+        digitalWrite(STAT_LEDS_PIN.PULSE_TRIG, HIGH);
+        
+        //! Generate simulated echo times
+        simulate_echo_times();
+        
+        //! Output simulated values in same format as real measurements
+        Serial.print(this_ticks[0]);   Serial.print(", ");
+        Serial.print(this_ticks[1]);   Serial.print(", ");
+        Serial.print(this_ticks[2]);   Serial.print(", ");
+        Serial.print(this_ticks[3]);   Serial.print(", ");
+        Serial.print(this_ticks[4]);   Serial.print(", ");
+        Serial.println(this_ticks[5]);
+        
+        //! Turn off pulse LED
+        digitalWrite(STAT_LEDS_PIN.PULSE_TRIG, LOW);
+        
+        //! Delay to match pulse mode timing
+        delay(TRANSMIT_DELAY);
+    }
+    else {
+      //! Turn off the pulse LED
+      digitalWrite(STAT_LEDS_PIN.PULSE_TRIG, LOW);
+    }
+  }
 
 }
 
