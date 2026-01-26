@@ -71,7 +71,7 @@ constexpr struct {
 constexpr uint8_t RECV_CNT = sizeof(ECHO_PIN)/sizeof(ECHO_PIN[0]); 
 #define echo_value() (PINC & 63)                        //! Macro to isolate certain pins in PORTC
 //! Serial Communication Parammters
-constexpr unsigned int BAUD_RATE = 19200;
+constexpr unsigned int BAUD_RATE  = 38400;
 
 //! Radio Parameters
 constexpr byte  RADIO_ADDRESS[6] = "abcde";             //! Radio channel ID to use, this must match the ID used in the transmitter station
@@ -86,7 +86,12 @@ constexpr uint16_t  TRANSMIT_DELAY = 200;
 
 //! Debuging Flag
 //! Only uncomment if debugging the arduino program
-#define DEBUG
+//#define DEBUG
+
+//! Makes the measure_echo_times tick count loop
+//! Exit as soon as all 0's are detected in the PINC
+//! register (When all receivers have received)
+#define ECHO_EARLY_EXIT
 
 RF24 radio(CE_PIN, CSN_PIN); // CE, CSN
 
@@ -146,49 +151,94 @@ static unsigned long this_not_used_ticks[6];
 unsigned int nwp;
 
 void measure_echo_times() {
-  register byte this_value, previous_value;
-  register unsigned long my_ticks;
-  unsigned int i;
-  
-  unsigned int max, j;
-  byte bits;
-  const char text[] = "Ping\n";
+    register byte this_value, previous_value;
+    register unsigned long my_ticks;
+    unsigned int i;
+    
+    unsigned int max, j;
+    byte bits;
+    const char text[] = "Ping\n";
 
-  nwp=0;
-  this_value=previous_value=0;
+    nwp=0;
+    this_value=previous_value=0;
 
     noInterrupts();
-       digitalWrite(TRIGGER_PIN, HIGH); 
-       digitalWrite(TRIGGER_PIN, HIGH);
-       digitalWrite(TRIGGER_PIN, HIGH);
-       delayMicroseconds(TRIGGER_HIGH_DURATION);
-       digitalWrite(TRIGGER_PIN, LOW); 
-      
- 
-       for(my_ticks=0;my_ticks < 0x31000; my_ticks++)
-       {
-         this_value=echo_value();
-         if (this_value != previous_value) 
-         {
-          value[nwp]=previous_value = this_value;
-          ticks[nwp++] = my_ticks;
-          if(nwp >= sizeof(value)/sizeof(value[0])) break;
-         }
-       }
-    interrupts();
-    
+    digitalWrite(TRIGGER_PIN, HIGH); 
+    digitalWrite(TRIGGER_PIN, HIGH);
+    digitalWrite(TRIGGER_PIN, HIGH);
+    delayMicroseconds(TRIGGER_HIGH_DURATION);
+    digitalWrite(TRIGGER_PIN, LOW); 
+  
+    //! This determines the "count" value for each sensor
+    constexpr long max_tick_val = 0x31000;
+    constexpr byte ALL_ECHOES = 63;  //! All 6 echo pins (bits 0-5)
+    byte seen_all_high = 0;  //! Track if we've seen all echoes go HIGH
 
+    for(my_ticks=0; my_ticks < max_tick_val; my_ticks++)
+    {
+      this_value = echo_value();
+      if (this_value != previous_value)
+      {
+        value[nwp] = previous_value = this_value;
+        ticks[nwp++] = my_ticks;
+
+        //! Track when all echoes have gone HIGH
+        if (this_value == ALL_ECHOES) {
+          seen_all_high = 1;
+        }
+
+        if (nwp >= sizeof(value)/sizeof(value[0])) {
+          break;
+        }
+
+        #ifdef ECHO_EARLY_EXIT
+        //! Exit early: all 6 echoes went HIGH then returned LOW
+        //! AKA all 6 echos have been received
+        if (seen_all_high && this_value == 0) {
+          break;
+        }
+        #endif
+
+      }
+    }
+    interrupts();
+    #ifdef DEBUG
+    Serial.print("nwp: ");
+    Serial.println(nwp);
+    Serial.print("highest tick:");
+    Serial.println(my_ticks);
+    #endif
+
+  //! Get the index of the max value 
+  //! Value = the state of the PINC register
+  //! Max value = all pins are set (echos are set)
+  //! To detect a distance the ultrasonic sensor 
+  //! Echo has to be set to high and the time difference
+  //! between high and low is the distance
  for(max=i=0;i<nwp;i++)
  {
   if (value[i] >= value[max]) max = i;
  }
+  #ifdef DEBUG
+  Serial.print("Max PINC value: ");
+  Serial.println(value[max]);
+  Serial.print("Max index value: ");
+  Serial.println(max);
+  #endif
 
+  //! Set all values in this_not_used_ticks to 1 and
+  ///! this_ticks to 0
  for(j=0;j<6;j++) {this_not_used_ticks[j]=1; this_ticks[j]=0;} 
 
  //abits = 32+16+8+4+2+1; // 0x3F
+ //! Start looking for the ticks
+ //! After all the receivers have been triggered
+ //! (echo pulled high)
  for(i=max+1;i<nwp;i++)
  {
+  //! Max value of ticks is 66000*4
    if (ticks[i] > 66000*4) break;
+   //! Which analog pin was set (value[t-1] - value[t])
    bits = value[i-1]-value[i];
    for(j=0;j<6;j++)
    {
@@ -248,13 +298,24 @@ void loop()
         #endif
         
         //! Measure the ultrasonic receive times
-        measure_echo_times();
+        unsigned long startTime = millis();
+        measure_echo_times(); //! REAL TIMER HOLDUP IS HERE!!
+        //this_ticks[0] = 3000;
+        //this_ticks[1] = 3000;
+        //this_ticks[2] = 3000;
+        //this_ticks[3] = 3000;
+        //this_ticks[4] = 3000;
+        //this_ticks[5] = 3000;
+        unsigned long elapsed = millis() - startTime;
+
         Serial.print(this_ticks[0]);   Serial.print(", ");
         Serial.print(this_ticks[1]);   Serial.print(", ");
         Serial.print(this_ticks[2]);   Serial.print(", ");
         Serial.print(this_ticks[3]);   Serial.print(", ");
         Serial.print(this_ticks[4]);   Serial.print(", ");
-        Serial.println(this_ticks[5]);
+        Serial.println(this_ticks[5]);   
+        //Serial.print("Time Elapsed: ");
+        //Serial.println(elapsed);
         //! Delay to prevent the transmit station from being overwhelmed
         delay(TRANSMIT_DELAY);
     }
