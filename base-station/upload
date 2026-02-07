@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+"""Upload base-station.ino to an Arduino using arduino-cli."""
+
+import argparse
+import subprocess
+import sys
+import json
+from pathlib import Path
+
+DEFAULT_FQBN = "arduino:avr:uno"
+
+
+def get_connected_boards():
+    """Get list of connected Arduino boards."""
+    try:
+        result = subprocess.run(
+            ["arduino-cli", "board", "list", "--format", "json"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        data = json.loads(result.stdout)
+        boards = []
+        for port in data.get("detected_ports", []):
+            port_addr = port.get("port", {}).get("address", "")
+            matching_boards = port.get("matching_boards", [])
+            if matching_boards:
+                board_name = matching_boards[0].get("name", "Unknown")
+                fqbn = matching_boards[0].get("fqbn", "")
+            else:
+                board_name = "Unknown"
+                fqbn = ""
+            boards.append({
+                "port": port_addr,
+                "name": board_name,
+                "fqbn": fqbn,
+            })
+        return boards
+    except subprocess.CalledProcessError as e:
+        print(f"Error running arduino-cli: {e.stderr}", file=sys.stderr)
+        sys.exit(1)
+    except json.JSONDecodeError:
+        print("Error parsing arduino-cli output", file=sys.stderr)
+        sys.exit(1)
+
+
+def list_boards():
+    """Print list of connected boards."""
+    boards = get_connected_boards()
+    if not boards:
+        print("No Arduino boards detected.")
+        return
+    print("Connected Arduino boards:")
+    for i, board in enumerate(boards):
+        print(f"  [{i}] {board['port']} - {board['name']} ({board['fqbn']})")
+
+
+def upload(port, fqbn, sketch_path):
+    """Upload sketch to Arduino."""
+    cmd = ["arduino-cli", "compile", "--upload", "-p", port]
+    if fqbn:
+        cmd.extend(["-b", fqbn])
+    cmd.append(str(sketch_path))
+
+    print(f"Uploading to {port}...")
+    result = subprocess.run(cmd, capture_output=False)
+    return result.returncode == 0
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Upload base-station.ino to an Arduino"
+    )
+    parser.add_argument(
+        "-l", "--list",
+        action="store_true",
+        help="List connected Arduino boards",
+    )
+    parser.add_argument(
+        "-p", "--port",
+        help="Serial port of the Arduino (e.g., /dev/ttyUSB0)",
+    )
+    parser.add_argument(
+        "-b", "--board",
+        default=DEFAULT_FQBN,
+        help=f"Fully Qualified Board Name (default: {DEFAULT_FQBN})",
+    )
+    parser.add_argument(
+        "-i", "--index",
+        type=int,
+        help="Select board by index from --list output",
+    )
+    parser.add_argument(
+        "sketch",
+        nargs="?",
+        default=None,
+        help="Path to .ino file (default: base-station.ino in script directory)",
+    )
+
+    args = parser.parse_args()
+
+    if args.list:
+        list_boards()
+        return
+
+    # Determine sketch path
+    if args.sketch:
+        sketch_path = Path(args.sketch)
+    else:
+        script_dir = Path(__file__).parent.resolve()
+        sketch_path = script_dir / "base-station.ino"
+
+    if not sketch_path.exists():
+        print(f"Error: Sketch not found: {sketch_path}", file=sys.stderr)
+        sys.exit(1)
+
+    # Determine port and board
+    port = args.port
+    fqbn = args.board
+
+    if args.index is not None:
+        boards = get_connected_boards()
+        if args.index < 0 or args.index >= len(boards):
+            print(f"Error: Invalid board index {args.index}", file=sys.stderr)
+            print(f"Use --list to see available boards (0-{len(boards)-1})")
+            sys.exit(1)
+        selected = boards[args.index]
+        port = selected["port"]
+        fqbn = fqbn or selected["fqbn"] or DEFAULT_FQBN
+
+    if not port:
+        # Try to auto-detect if only one board connected
+        boards = get_connected_boards()
+        if len(boards) == 0:
+            print("Error: No Arduino boards detected.", file=sys.stderr)
+            sys.exit(1)
+        elif len(boards) == 1:
+            port = boards[0]["port"]
+            fqbn = fqbn or boards[0]["fqbn"] or DEFAULT_FQBN
+            print(f"Auto-detected: {boards[0]['name']} on {port}")
+        else:
+            print("Error: Multiple boards detected. Specify with -p or -i.")
+            print("Use --list to see available boards.")
+            sys.exit(1)
+
+    if upload(port, fqbn, sketch_path):
+        print("Upload successful!")
+    else:
+        print("Upload failed.", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
