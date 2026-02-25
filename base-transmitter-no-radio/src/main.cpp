@@ -6,19 +6,19 @@ example:
 ::
 ::
 
-In the above example values represent the time it takes for the sound to travel the distance 
-to each of the six towers respectively.  The unit of time for the number is "counts" but will 
-definitely have an Ax+B type of offset where x is the count value, A is the scaling factor 
-from counts to distance (or time) and B is the scaling offset necessary to adjust for counts 
+In the above example values represent the time it takes for the sound to travel the distance
+to each of the six towers respectively.  The unit of time for the number is "counts" but will
+definitely have an Ax+B type of offset where x is the count value, A is the scaling factor
+from counts to distance (or time) and B is the scaling offset necessary to adjust for counts
 not starting exactly at zero.
 
 These values are output by the Arduino serially at 250000 baud and thus can be recieved by
 another program such as matlab.
 ----------
 
-ChatGPT defines counts as the following: 
-In a timing system, "counts" typically refer to the incrementss of a digital 
-timer or counter that measures time intervals. These counts represent 
+ChatGPT defines counts as the following:
+In a timing system, "counts" typically refer to the incrementss of a digital
+timer or counter that measures time intervals. These counts represent
 discrete time steps based on the clock signal driving the system.
 
 For example:
@@ -34,12 +34,13 @@ Frequency measurement – Counting pulses within a known time window to determin
 
 Timestamping events – Logging counts to mark when events occur relative to a reference time.
 
-Since your Raspberry Pi project deals with sonar-based distances, "counts" could be 
-used in time-of-flight (ToF) calculations, where the system counts clock cycles 
+Since your Raspberry Pi project deals with sonar-based distances, "counts" could be
+used in time-of-flight (ToF) calculations, where the system counts clock cycles
 between the sonar pulse transmission and echo reception to determine distance.
 
 */
 
+#include <Arduino.h>
 #include <SPI.h>
 
 
@@ -53,10 +54,10 @@ const int RECV_CNT=6;
 #define TRIGGER_PIN (PIN4)
 #define echo_value() (PINC & 63)
 
-void setup() 
+void setup()
 {
   unsigned int i;
-  
+
   //Serial.begin(250000);  // tbd probably want faster
   Serial.begin(19200);  // tbd probably want faster
   pinMode(TRIGGER_PIN, OUTPUT);
@@ -73,13 +74,13 @@ void setup()
   //radio.stopListening();
 }
 
-static byte value[100]={0}; 
+static byte value[100]={0};
 static unsigned long ticks[100]={0};
 static unsigned long this_ticks[6];
 static unsigned long previous_ticks[6];
 
-void loop() 
-{ 
+void loop()
+{
   register byte this_value, previous_value;
   register unsigned long my_ticks;
   unsigned int i;
@@ -95,19 +96,19 @@ void loop()
     noInterrupts();
 
       // Guarantees a KNOWN trigger delay/duration (what is the delay?)
-       digitalWrite(TRIGGER_PIN, HIGH); 
        digitalWrite(TRIGGER_PIN, HIGH);
        digitalWrite(TRIGGER_PIN, HIGH);
-       digitalWrite(TRIGGER_PIN, HIGH); 
        digitalWrite(TRIGGER_PIN, HIGH);
        digitalWrite(TRIGGER_PIN, HIGH);
-       digitalWrite(TRIGGER_PIN, LOW); 
-       digitalWrite(TRIGGER_PIN, LOW); 
-       digitalWrite(TRIGGER_PIN, LOW); 
-       digitalWrite(TRIGGER_PIN, LOW); 
-       digitalWrite(TRIGGER_PIN, LOW); 
-       digitalWrite(TRIGGER_PIN, LOW); 
- 
+       digitalWrite(TRIGGER_PIN, HIGH);
+       digitalWrite(TRIGGER_PIN, HIGH);
+       digitalWrite(TRIGGER_PIN, LOW);
+       digitalWrite(TRIGGER_PIN, LOW);
+       digitalWrite(TRIGGER_PIN, LOW);
+       digitalWrite(TRIGGER_PIN, LOW);
+       digitalWrite(TRIGGER_PIN, LOW);
+       digitalWrite(TRIGGER_PIN, LOW);
+
        // Ticks is 1 time unit of however long the for loop takes to run ()
        // Is each for loop execution time known?
        for(my_ticks=0;my_ticks < 0x28000; my_ticks++)
@@ -116,7 +117,7 @@ void loop()
         // If the state has changed in any echo pin, store the number of ticks passed.
          this_value=echo_value();
          // If A0-A5 have changed (DOUBLE CHECK)
-         if (this_value != previous_value) 
+         if (this_value != previous_value)
          {
           // Store the current state of the echo pins and the tick count it corresponds to
           value[nwp]=previous_value = this_value;
@@ -126,7 +127,7 @@ void loop()
          }
        }
     interrupts();
-    
+
 // Find the index that continas the max pin state value
 // , aka all echo pins are "active" and store it
  for(max=i=0;i<nwp;i++)
@@ -136,7 +137,7 @@ void loop()
 
 
   // zero out ticks
- for(j=0;j<6;j++) this_ticks[j]=0; 
+ for(j=0;j<6;j++) this_ticks[j]=0;
 
 
  for(i=max+1;i<nwp;i++)
@@ -145,7 +146,7 @@ void loop()
    if (ticks[i] > 66000*4) break;
    // Get which echo pin was activated
    bits = value[i-1]-value[i];
-   
+
    // Go through all the echo pins
    // and find the tick count that matches that echo pin
    for(j=0;j<6;j++)
@@ -160,7 +161,7 @@ void loop()
 // hold previous -- but skip single zero values -- and infinity (I hard coded 160000)
 for(j=0;j<6;j++)
 {
-  // Skip single zero values in current read 
+  // Skip single zero values in current read
   if ((previous_ticks[j] !=0) && (this_ticks[j]  == 0))
   {
     this_ticks[j]=previous_ticks[j];
@@ -180,7 +181,7 @@ for(j=0;j<6;j++)
 }
 
  //Serial.print("2000, 7000, ");
- 
+
  /*if (
         (this_ticks[0] == 0) &&
         (this_ticks[1] == 0) &&
@@ -204,7 +205,7 @@ for(j=0;j<6;j++)
  Serial.print("R4:");
  Serial.print(this_ticks[4]);   Serial.print(", ");
  Serial.print("R5:");
- Serial.println(this_ticks[5]); 
+ Serial.println(this_ticks[5]);
  //Serial.println(", HLim:8000");
  #else
  Serial.print(this_ticks[0]);   Serial.print(", "); // A0
@@ -212,7 +213,7 @@ for(j=0;j<6;j++)
  Serial.print(this_ticks[2]);   Serial.print(", "); // A1
  Serial.print(this_ticks[3]);   Serial.print(", ");// ..
  Serial.print(this_ticks[4]);   Serial.print(", ");
- Serial.println(this_ticks[5]); 
+ Serial.println(this_ticks[5]);
  #endif
 
 

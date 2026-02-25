@@ -1,5 +1,5 @@
 /*
-C++ program to control the base station of the UltraGPS system. Sends a radio pulse when 
+C++ program to control the base station of the UltraGPS system. Sends a radio pulse when
 to initiate the ultrasonic ping that is then received by the set of receivers. The program
 returns the tick count of all the receivers after the radio pulse is sent.
 
@@ -8,19 +8,19 @@ Example progam output:
 ::
 ::
 
-In the above example values represent the time it takes for the sound to travel the distance 
-to each of the six towers respectively.  The unit of time for the number is "counts" but will 
-definitely have an Ax+B type of offset where x is the count value, A is the scaling factor 
-from counts to distance (or time) and B is the scaling offset necessary to adjust for counts 
+In the above example values represent the time it takes for the sound to travel the distance
+to each of the six towers respectively.  The unit of time for the number is "counts" but will
+definitely have an Ax+B type of offset where x is the count value, A is the scaling factor
+from counts to distance (or time) and B is the scaling offset necessary to adjust for counts
 not starting exactly at zero.
 
 These values are output by the Arduino serially at X (set in the setup function) baud and thus can be recieved by
 another program such as matlab.
 ----------
 
-ChatGPT defines counts as the following: 
-In a timing system, "counts" typically refer to the incrementss of a digital 
-timer or counter that measures time intervals. These counts represent 
+ChatGPT defines counts as the following:
+In a timing system, "counts" typically refer to the incrementss of a digital
+timer or counter that measures time intervals. These counts represent
 discrete time steps based on the clock signal driving the system.
 
 For example:
@@ -36,31 +36,26 @@ Frequency measurement – Counting pulses within a known time window to determin
 
 Timestamping events – Logging counts to mark when events occur relative to a reference time.
 
-"counts" could be used in time-of-flight (ToF) calculations, where the system 
-counts clock cycles between the sonar pulse transmission and echo reception to 
+"counts" could be used in time-of-flight (ToF) calculations, where the system
+counts clock cycles between the sonar pulse transmission and echo reception to
 determine distance.
 
 */
 
+#include <Arduino.h>
 #include <SPI.h>
-//! https://nrf24.github.io/RF24/ 
-//! Library used
-#include <nRF24L01.h>
-#include <RF24.h>
-#include <RF24_config.h>
-#include <printf.h>
+#include "radio.h"
+#include "debug_macros.h"
+
+RadioController radioCtrl(9, 10, 5);  //! CE, CSN, Trigger pins
 
 //! Base Station Parameters
-constexpr uint8_t CE_PIN = 9;  
-constexpr uint8_t CSN_PIN = 10;
-constexpr uint8_t TRIGGER_PIN = 5;
-constexpr char*   TRANSMITTER_STATION_ID = "A1";        //! Identifies which transmission station is being targetted
 constexpr unsigned int TRIGGER_HIGH_DURATION = 300;     //! How long to hold the high state of the trigger pin (microseconds)
 constexpr uint8_t ECHO_PIN[]={A0, A1, A2, A3, A4, A5};  //! List of all the receivers ultrasonic echo pins
 constexpr struct {
     //! On the PCB these map from STAT_LED_1 to LED_5
-    uint8_t STAT_1  = 3; 
-    uint8_t STAT_2 = 4;    
+    uint8_t STAT_1  = 3;
+    uint8_t STAT_2 = 4;
     uint8_t STAT_3 = 6;
     uint8_t PULSE_TRIG = 7;     //! Ultrasonic Pulse (STAT_2)
     uint8_t RADIO_STATUS = 8;   //! Radio Conn Status (STAT_1)
@@ -68,13 +63,10 @@ constexpr struct {
     uint8_t COUNT = 5;
 }STAT_LEDS_PIN;                                         //! List of all the pins for each status LED
 //! Number of receivers being used
-constexpr uint8_t RECV_CNT = sizeof(ECHO_PIN)/sizeof(ECHO_PIN[0]); 
+constexpr uint8_t RECV_CNT = sizeof(ECHO_PIN)/sizeof(ECHO_PIN[0]);
 #define echo_value() (PINC & 63)                        //! Macro to isolate certain pins in PORTC
 //! Serial Communication Parammters
 constexpr unsigned int BAUD_RATE  = 38400;
-
-//! Radio Parameters
-constexpr byte  RADIO_ADDRESS[6] = "abcde";             //! Radio channel ID to use, this must match the ID used in the transmitter station
 
 //! Tuning Parameters
 
@@ -82,29 +74,20 @@ constexpr byte  RADIO_ADDRESS[6] = "abcde";             //! Radio channel ID to 
 //! the transmitter and base station transmit pins will fall out of sync
 //! because of the time it takes for the base station to
 //! wait for the ACK packet.
-constexpr uint16_t  TRANSMIT_DELAY = 200;             
-
-//! Debuging Flag
-//! Only uncomment if debugging the arduino program
-//#define DEBUG
+constexpr uint16_t  TRANSMIT_DELAY = 200;
 
 //! Makes the measure_echo_times tick count loop
 //! Exit as soon as all 0's are detected in the PINC
 //! register (When all receivers have received)
-#define ECHO_EARLY_EXIT
+//#define ECHO_EARLY_EXIT
 
-RF24 radio(CE_PIN, CSN_PIN); // CE, CSN
-
-void setup() 
+void setup()
 {
   //! Serial setup
   Serial.begin(BAUD_RATE);
-  printf_begin();
-  #ifdef DEBUG
-  Serial.println("Started");
-  #endif
-
-  pinMode(TRIGGER_PIN, OUTPUT);
+  while (!Serial && millis() < 3000);
+  DEBUG_PRINTLN("Started");
+  //Serial.println("test");
 
   for(uint8_t i=0; i < RECV_CNT ;i++)
   {
@@ -118,33 +101,36 @@ void setup()
   pinMode(STAT_LEDS_PIN.PULSE_TRIG, OUTPUT);
   pinMode(STAT_LEDS_PIN.RADIO_STATUS, OUTPUT);
 
-  while(!radio.begin()){
-      //! If radio fails to start, flash the RADIO_STATUS LED
-      //! and print an error message
-      Serial.println("Radio is not hardware responding...");
+  // Initialze radio and synchronize transmitters clocks
+  if (!radioCtrl.init()) {
+    DEBUG_INFO_PRINTLN("[ERROR] Radio init failed. Halting.");
+    while (true) {
+      DEBUG_INFO_PRINTLN("[ERROR] Still halted.");
       digitalWrite(STAT_LEDS_PIN.RADIO_STATUS, HIGH);
-      delay(100);
+      delay(1000);
       digitalWrite(STAT_LEDS_PIN.RADIO_STATUS, LOW);
-      delay(100);
-  };
-  
+      delay(1000);
+    }
+  }
+  if (!radioCtrl.syncTransmitter()) {
+    DEBUG_INFO_PRINTLN("[ERROR] Sync failed. Halting.");
+    while (true) {
+        DEBUG_INFO_PRINTLN("[ERROR] Still halted.");
+        digitalWrite(STAT_LEDS_PIN.RADIO_STATUS, HIGH);
+        delay(1000);
+        digitalWrite(STAT_LEDS_PIN.RADIO_STATUS, LOW);
+        delay(1000);
+      }
+  }
+
   //! Radio initialized successfully - keep RADIO_STATUS LED on
   digitalWrite(STAT_LEDS_PIN.RADIO_STATUS, HIGH);
-
-  radio.setPALevel(RF24_PA_LOW);
-  radio.stopListening();
-  radio.openWritingPipe(RADIO_ADDRESS);
-  
-  #ifdef DEBUG
-  //! Print the radio details
-  radio.printDetails();
-  #endif
 
   delay(1000);
 }
 
 //! Global variables for echo times
-static byte value[100]={0}; 
+static byte value[100]={0};
 static unsigned long ticks[100]={0};
 static unsigned long this_ticks[6];
 static unsigned long this_not_used_ticks[6];
@@ -154,7 +140,7 @@ void measure_echo_times() {
     register byte this_value, previous_value;
     register unsigned long my_ticks;
     unsigned int i;
-    
+
     unsigned int max, j;
     byte bits;
     const char text[] = "Ping\n";
@@ -163,12 +149,7 @@ void measure_echo_times() {
     this_value=previous_value=0;
 
     noInterrupts();
-    digitalWrite(TRIGGER_PIN, HIGH); 
-    digitalWrite(TRIGGER_PIN, HIGH);
-    digitalWrite(TRIGGER_PIN, HIGH);
-    delayMicroseconds(TRIGGER_HIGH_DURATION);
-    digitalWrite(TRIGGER_PIN, LOW); 
-  
+
     //! This determines the "count" value for each sensor
     constexpr long max_tick_val = 0x31000;
     constexpr byte ALL_ECHOES = 63;  //! All 6 echo pins (bits 0-5)
@@ -202,33 +183,25 @@ void measure_echo_times() {
       }
     }
     interrupts();
-    #ifdef DEBUG
-    Serial.print("nwp: ");
-    Serial.println(nwp);
-    Serial.print("highest tick:");
-    Serial.println(my_ticks);
-    #endif
+    DEBUG_PRINTF("nwp: %u\n", nwp);
+    DEBUG_PRINTF("highest tick: %lu\n", my_ticks);
 
-  //! Get the index of the max value 
+  //! Get the index of the max value
   //! Value = the state of the PINC register
   //! Max value = all pins are set (echos are set)
-  //! To detect a distance the ultrasonic sensor 
+  //! To detect a distance the ultrasonic sensor
   //! Echo has to be set to high and the time difference
   //! between high and low is the distance
  for(max=i=0;i<nwp;i++)
  {
   if (value[i] >= value[max]) max = i;
  }
-  #ifdef DEBUG
-  Serial.print("Max PINC value: ");
-  Serial.println(value[max]);
-  Serial.print("Max index value: ");
-  Serial.println(max);
-  #endif
+  DEBUG_PRINTF("Max PINC value: %u\n", value[max]);
+  DEBUG_PRINTF("Max index value: %u\n", max);
 
   //! Set all values in this_not_used_ticks to 1 and
   ///! this_ticks to 0
- for(j=0;j<6;j++) {this_not_used_ticks[j]=1; this_ticks[j]=0;} 
+ for(j=0;j<6;j++) {this_not_used_ticks[j]=1; this_ticks[j]=0;}
 
  //abits = 32+16+8+4+2+1; // 0x3F
  //! Start looking for the ticks
@@ -256,12 +229,12 @@ void simulate_echo_times() {
   //! Add small variations to make it more realistic
   constexpr unsigned long BASE_COUNT = 3000;
   constexpr int VARIATION = 200;  // ±200 counts variation
-  
+
   //! Generate simulated values with slight variations for each receiver
   //! Using a simple pattern to create realistic-looking variations
   static unsigned long counter = 0;
   counter++;
-  
+
   for(uint8_t i = 0; i < RECV_CNT; i++) {
     //! Create a pattern-based variation that changes slightly each call
     //! Each receiver gets a different offset based on its index
@@ -271,66 +244,57 @@ void simulate_echo_times() {
 }
 
 
-void loop() 
-{ 
+void loop()
+{
+
   //! Only send a message if a ping is requested using the serial line
   if (Serial.available() > 0) {
     // Read the incoming byte
     char incomingByte = Serial.read();
-    
+
     // Trigger a pulse only if 'P'  is received
     if (incomingByte == 'P') {
         // Send message to TX to start pinging
-        bool success = radio.write(TRANSMITTER_STATION_ID, sizeof(TRANSMITTER_STATION_ID));  
+        //bool success = radio.write(TRANSMITTER_STATION_ID, sizeof(TRANSMITTER_STATION_ID));
 
+        bool success = radioCtrl.sendTrigger();
+        measure_echo_times(); //! Measure the echo times immediately after sending the trigger
+        
         if(success) {
           digitalWrite(STAT_LEDS_PIN.PULSE_TRIG, HIGH);
         } else {
           digitalWrite(STAT_LEDS_PIN.PULSE_TRIG, LOW);
         }
 
-        #ifdef DEBUG
-        if (success) {
-            Serial.println("Message sent successfully!");
+        if(success) {
+          DEBUG_PRINTLN("Message sent successfully!");
         } else {
-            Serial.println("Message failed to send!");
-        }  
-        #endif
+          DEBUG_PRINTLN("Message failed to send!");
+        }
+
         
-        //! Measure the ultrasonic receive times
-        unsigned long startTime = millis();
-        measure_echo_times(); //! REAL TIMER HOLDUP IS HERE!!
-        //this_ticks[0] = 3000;
-        //this_ticks[1] = 3000;
-        //this_ticks[2] = 3000;
-        //this_ticks[3] = 3000;
-        //this_ticks[4] = 3000;
-        //this_ticks[5] = 3000;
-        unsigned long elapsed = millis() - startTime;
 
         Serial.print(this_ticks[0]);   Serial.print(", ");
         Serial.print(this_ticks[1]);   Serial.print(", ");
         Serial.print(this_ticks[2]);   Serial.print(", ");
         Serial.print(this_ticks[3]);   Serial.print(", ");
         Serial.print(this_ticks[4]);   Serial.print(", ");
-        Serial.println(this_ticks[5]);   
-        //Serial.print("Time Elapsed: ");
-        //Serial.println(elapsed);
+        Serial.println(this_ticks[5]);
+
+        
         //! Delay to prevent the transmit station from being overwhelmed
         delay(TRANSMIT_DELAY);
     }
     //! Simulation mode triggered by 'S'
     else if (incomingByte == 'S') {
-        #ifdef DEBUG
-        Serial.println("Simulation mode activated");
-        #endif
-        
+        DEBUG_PRINTLN("Simulation mode activated");
+
         //! Turn on pulse LED to mimic real ping
         digitalWrite(STAT_LEDS_PIN.PULSE_TRIG, HIGH);
-        
+
         //! Generate simulated echo times
         simulate_echo_times();
-        
+
         //! Output simulated values in same format as real measurements
         Serial.print(this_ticks[0]);   Serial.print(", ");
         Serial.print(this_ticks[1]);   Serial.print(", ");
@@ -338,10 +302,10 @@ void loop()
         Serial.print(this_ticks[3]);   Serial.print(", ");
         Serial.print(this_ticks[4]);   Serial.print(", ");
         Serial.println(this_ticks[5]);
-        
+
         //! Turn off pulse LED
         digitalWrite(STAT_LEDS_PIN.PULSE_TRIG, LOW);
-        
+
         //! Delay to match pulse mode timing
         delay(TRANSMIT_DELAY);
     }
