@@ -46,34 +46,19 @@ determine distance.
 #include <SPI.h>
 #include "radio.h"
 #include "debug_macros.h"
+#include "led_control.h"
 
-RadioController radioCtrl(9, 10, 5);  //! CE, CSN, Trigger pins
 
 //! Base Station Parameters
 constexpr unsigned int TRIGGER_HIGH_DURATION = 300;     //! How long to hold the high state of the trigger pin (microseconds)
 constexpr uint8_t ECHO_PIN[]={A0, A1, A2, A3, A4, A5};  //! List of all the receivers ultrasonic echo pins
-constexpr struct {
-    //! On the PCB these map from STAT_LED_1 to LED_5
-    uint8_t STAT_1  = 3;
-    uint8_t STAT_2 = 4;
-    uint8_t STAT_3 = 6;
-    uint8_t PULSE_TRIG = 7;     //! Ultrasonic Pulse (STAT_2)
-    uint8_t RADIO_STATUS = 8;   //! Radio Conn Status (STAT_1)
-    //! Number of status pins
-    uint8_t COUNT = 5;
-}STAT_LEDS_PIN;                                         //! List of all the pins for each status LED
 //! Number of receivers being used
 constexpr uint8_t RECV_CNT = sizeof(ECHO_PIN)/sizeof(ECHO_PIN[0]);
 #define echo_value() (PINC & 63)                        //! Macro to isolate certain pins in PORTC
 //! Serial Communication Parammters
 constexpr unsigned int BAUD_RATE  = 38400;
 
-//! Tuning Parameters
-
-//! How long to wait between transmissions, if this is too short
-//! the transmitter and base station transmit pins will fall out of sync
-//! because of the time it takes for the base station to
-//! wait for the ACK packet.
+//! Minimum delay between sending a trigger activations (milliseconds)
 constexpr uint16_t  TRANSMIT_DELAY = 200;
 
 //! Makes the measure_echo_times tick count loop
@@ -81,50 +66,49 @@ constexpr uint16_t  TRANSMIT_DELAY = 200;
 //! register (When all receivers have received)
 //#define ECHO_EARLY_EXIT
 
+//! Instantiate all classes
+RadioController radioCtrl(9, 10, 5);  //! CE, CSN, Trigger pins
+LedControl leds(3, 4, 6, 7, 8);      //! STAT_1, STAT_2, STAT_3, PULSE_TRIG, RADIO_STATUS
+
 void setup()
 {
   //! Serial setup
   Serial.begin(BAUD_RATE);
   while (!Serial && millis() < 3000);
   DEBUG_PRINTLN("Started");
-  //Serial.println("test");
 
   for(uint8_t i=0; i < RECV_CNT ;i++)
   {
     pinMode(ECHO_PIN[i], INPUT_PULLUP);
   }
 
-  //! Initialize all status LED pins
-  pinMode(STAT_LEDS_PIN.STAT_1, OUTPUT);
-  pinMode(STAT_LEDS_PIN.STAT_2, OUTPUT);
-  pinMode(STAT_LEDS_PIN.STAT_3, OUTPUT);
-  pinMode(STAT_LEDS_PIN.PULSE_TRIG, OUTPUT);
-  pinMode(STAT_LEDS_PIN.RADIO_STATUS, OUTPUT);
+  //! Initialiaze LEDs
+  leds.init(0);
 
-  // Initialze radio and synchronize transmitters clocks
+  // Initialize radio and synchronize transmitters clocks
   if (!radioCtrl.init()) {
     DEBUG_INFO_PRINTLN("[ERROR] Radio init failed. Halting.");
     while (true) {
       DEBUG_INFO_PRINTLN("[ERROR] Still halted.");
-      digitalWrite(STAT_LEDS_PIN.RADIO_STATUS, HIGH);
+      leds.setRadioStatus(true);
       delay(1000);
-      digitalWrite(STAT_LEDS_PIN.RADIO_STATUS, LOW);
+      leds.setRadioStatus(false);
       delay(1000);
     }
   }
   if (!radioCtrl.syncTransmitter()) {
     DEBUG_INFO_PRINTLN("[ERROR] Sync failed. Halting.");
     while (true) {
-        DEBUG_INFO_PRINTLN("[ERROR] Still halted.");
-        digitalWrite(STAT_LEDS_PIN.RADIO_STATUS, HIGH);
-        delay(1000);
-        digitalWrite(STAT_LEDS_PIN.RADIO_STATUS, LOW);
-        delay(1000);
-      }
+      DEBUG_INFO_PRINTLN("[ERROR] Still halted.");
+      leds.setRadioStatus(true);
+      delay(1000);
+      leds.setRadioStatus(false);
+      delay(1000);
+    }
   }
 
   //! Radio initialized successfully - keep RADIO_STATUS LED on
-  digitalWrite(STAT_LEDS_PIN.RADIO_STATUS, HIGH);
+  leds.setRadioStatus(true);
 
   delay(1000);
 }
@@ -260,11 +244,7 @@ void loop()
         bool success = radioCtrl.sendTrigger();
         measure_echo_times(); //! Measure the echo times immediately after sending the trigger
         
-        if(success) {
-          digitalWrite(STAT_LEDS_PIN.PULSE_TRIG, HIGH);
-        } else {
-          digitalWrite(STAT_LEDS_PIN.PULSE_TRIG, LOW);
-        }
+        leds.setPulseTrig(success);
 
         if(success) {
           DEBUG_PRINTLN("Message sent successfully!");
@@ -290,7 +270,7 @@ void loop()
         DEBUG_PRINTLN("Simulation mode activated");
 
         //! Turn on pulse LED to mimic real ping
-        digitalWrite(STAT_LEDS_PIN.PULSE_TRIG, HIGH);
+        leds.setPulseTrig(true);
 
         //! Generate simulated echo times
         simulate_echo_times();
@@ -304,14 +284,14 @@ void loop()
         Serial.println(this_ticks[5]);
 
         //! Turn off pulse LED
-        digitalWrite(STAT_LEDS_PIN.PULSE_TRIG, LOW);
+        leds.setPulseTrig(false);
 
         //! Delay to match pulse mode timing
         delay(TRANSMIT_DELAY);
     }
     else {
       //! Turn off the pulse LED
-      digitalWrite(STAT_LEDS_PIN.PULSE_TRIG, LOW);
+      leds.setPulseTrig(false);
     }
   }
 
