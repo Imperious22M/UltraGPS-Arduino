@@ -47,6 +47,7 @@ determine distance.
 #include "radio.h"
 #include "debug_macros.h"
 #include "led_control.h"
+#include "command_control.h"
 
 
 //! Base Station Parameters
@@ -58,8 +59,8 @@ constexpr uint8_t RECV_CNT = sizeof(ECHO_PIN)/sizeof(ECHO_PIN[0]);
 //! Serial Communication Parammters
 constexpr unsigned int BAUD_RATE  = 38400;
 
-//! Minimum delay between sending a trigger activations (milliseconds)
-constexpr uint16_t  TRANSMIT_DELAY = 200;
+//! Minimum delay between sending a trigger activations (milliseconds) — mutable via 'D' command
+uint16_t transmitDelay = 200;
 
 //! Makes the measure_echo_times tick count loop
 //! Exit as soon as all 0's are detected in the PINC
@@ -69,6 +70,25 @@ constexpr uint16_t  TRANSMIT_DELAY = 200;
 //! Instantiate all classes
 RadioController radioCtrl(9, 10, 5);  //! CE, CSN, Trigger pins
 LedControl leds(3, 4, 6, 7, 8);      //! STAT_1, STAT_2, STAT_3, PULSE_TRIG, RADIO_STATUS
+
+//! Forward declarations for command callbacks (defined after measure/simulate helpers)
+void onPulse(const CmdArg* args);
+void onSimulate(const CmdArg* args);
+void onSetDelay(const CmdArg* args);
+
+//! Command definitions
+static const CommandDef CMD_PULSE    = { CommandType::PULSE,     0, {},                  onPulse    };
+static const CommandDef CMD_SIMULATE = { CommandType::SIMULATE,  0, {},                  onSimulate };
+static const CommandDef CMD_SETDELAY = { CommandType::SET_DELAY, 1, { ArgType::INT },    onSetDelay };
+
+//! Global command table — maps single ASCII letters to their command definitions
+static const CommandEntry GLOBAL_CMD_TABLE[] = {
+    { 'P', &CMD_PULSE    },  //! Trigger ultrasonic pulse
+    { 'S', &CMD_SIMULATE },  //! Run simulation mode
+    { 'D', &CMD_SETDELAY },  //! Set transmit delay  e.g. "D 500\n"
+};
+
+CommandControl cmdCtrl(GLOBAL_CMD_TABLE, sizeof(GLOBAL_CMD_TABLE) / sizeof(GLOBAL_CMD_TABLE[0]));
 
 void setup()
 {
@@ -228,74 +248,58 @@ void simulate_echo_times() {
 }
 
 
-void loop()
-{
+// ---------------------------------------------------------------------------
+// Command callbacks
+// ---------------------------------------------------------------------------
 
-  //! Only send a message if a ping is requested using the serial line
-  if (Serial.available() > 0) {
-    // Read the incoming byte
-    char incomingByte = Serial.read();
+void onPulse(const CmdArg*) {
+    bool success = radioCtrl.sendTrigger();
+    measure_echo_times();
 
-    // Trigger a pulse only if 'P'  is received
-    if (incomingByte == 'P') {
-        // Send message to TX to start pinging
-        //bool success = radio.write(TRANSMITTER_STATION_ID, sizeof(TRANSMITTER_STATION_ID));
+    leds.setPulseTrig(success);
 
-        bool success = radioCtrl.sendTrigger();
-        measure_echo_times(); //! Measure the echo times immediately after sending the trigger
-        
-        leds.setPulseTrig(success);
-
-        if(success) {
-          DEBUG_PRINTLN("Message sent successfully!");
-        } else {
-          DEBUG_PRINTLN("Message failed to send!");
-        }
-
-        
-
-        Serial.print(this_ticks[0]);   Serial.print(", ");
-        Serial.print(this_ticks[1]);   Serial.print(", ");
-        Serial.print(this_ticks[2]);   Serial.print(", ");
-        Serial.print(this_ticks[3]);   Serial.print(", ");
-        Serial.print(this_ticks[4]);   Serial.print(", ");
-        Serial.println(this_ticks[5]);
-
-        
-        //! Delay to prevent the transmit station from being overwhelmed
-        delay(TRANSMIT_DELAY);
+    if (success) {
+        DEBUG_PRINTLN("Message sent successfully!");
+    } else {
+        DEBUG_PRINTLN("Message failed to send!");
     }
-    //! Simulation mode triggered by 'S'
-    else if (incomingByte == 'S') {
-        DEBUG_PRINTLN("Simulation mode activated");
 
-        //! Turn on pulse LED to mimic real ping
-        leds.setPulseTrig(true);
+    Serial.print(this_ticks[0]);   Serial.print(", ");
+    Serial.print(this_ticks[1]);   Serial.print(", ");
+    Serial.print(this_ticks[2]);   Serial.print(", ");
+    Serial.print(this_ticks[3]);   Serial.print(", ");
+    Serial.print(this_ticks[4]);   Serial.print(", ");
+    Serial.println(this_ticks[5]);
 
-        //! Generate simulated echo times
-        simulate_echo_times();
-
-        //! Output simulated values in same format as real measurements
-        Serial.print(this_ticks[0]);   Serial.print(", ");
-        Serial.print(this_ticks[1]);   Serial.print(", ");
-        Serial.print(this_ticks[2]);   Serial.print(", ");
-        Serial.print(this_ticks[3]);   Serial.print(", ");
-        Serial.print(this_ticks[4]);   Serial.print(", ");
-        Serial.println(this_ticks[5]);
-
-        //! Turn off pulse LED
-        leds.setPulseTrig(false);
-
-        //! Delay to match pulse mode timing
-        delay(TRANSMIT_DELAY);
-    }
-    else {
-      //! Turn off the pulse LED
-      leds.setPulseTrig(false);
-    }
-  }
-
+    delay(transmitDelay);
 }
 
-///////////////////////////
+void onSimulate(const CmdArg*) {
+    DEBUG_PRINTLN("Simulation mode activated");
+
+    leds.setPulseTrig(true);
+    simulate_echo_times();
+
+    Serial.print(this_ticks[0]);   Serial.print(", ");
+    Serial.print(this_ticks[1]);   Serial.print(", ");
+    Serial.print(this_ticks[2]);   Serial.print(", ");
+    Serial.print(this_ticks[3]);   Serial.print(", ");
+    Serial.print(this_ticks[4]);   Serial.print(", ");
+    Serial.println(this_ticks[5]);
+
+    leds.setPulseTrig(false);
+    delay(transmitDelay);
+}
+
+void onSetDelay(const CmdArg* args) {
+    transmitDelay = (uint16_t)args[0].i;
+    DEBUG_INFO_PRINTF("Transmit delay set to %u ms\n", transmitDelay);
+}
+
+// ---------------------------------------------------------------------------
+
+void loop()
+{
+    cmdCtrl.poll();
+}
 
