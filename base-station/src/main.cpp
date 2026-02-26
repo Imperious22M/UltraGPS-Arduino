@@ -130,7 +130,6 @@ void setup()
   //! Radio initialized successfully - keep RADIO_STATUS LED on
   leds.setRadioStatus(true);
 
-  delay(1000);
 }
 
 //! Global variables for echo times
