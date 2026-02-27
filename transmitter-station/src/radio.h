@@ -43,7 +43,7 @@ struct CommsPacket {
 //! BUT THE DELAY IS REQUIRED FOR THE RECEIVERS TO
 //! PROPERLY GO INTO THEIR MEASUREMENT CYCLE AND ASSERT THE ECHO PIN
 //! So if this is too small you get a dead zone around the receivers
-constexpr uint32_t LATENCY_COMPENSATION_US = 2000;
+constexpr uint32_t LATENCY_COMPENSATION_US = 4000;
 
 //! IRQ variables
 volatile static bool     packet_ready = false;
@@ -59,8 +59,6 @@ public:
     RadioController(uint8_t ce_pin, uint8_t csn_pin, uint8_t trigger_pin, uint8_t fail_threshold = 5);
 
     bool init();
-    bool waitForSyncRequest(uint32_t timeout_ms = 2000);
-    bool doSyncHandshake(uint32_t timeout_ms = 2000);
     bool syncReceiver(uint8_t max_attempts = 5);
     void handleRadioPacket(LedControl &leds);
 

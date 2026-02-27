@@ -24,7 +24,7 @@ void setup()
 {
   //! Serial setup
   Serial.begin(BAUD_RATE);
-  while (!Serial && millis() < 3000);
+  //while (!Serial && millis() < 3000);
   DEBUG_PRINTLN("=== Receiver Starting ===");
 
   //! Initialiaze LEDs

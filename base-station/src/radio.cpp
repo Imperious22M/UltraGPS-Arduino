@@ -30,15 +30,17 @@ bool RadioController::init() {
         return false;
     }
 
-    radio.setDataRate(RF24_2MBPS);
-    radio.setPALevel(RF24_PA_LOW);
+    radio.setDataRate(RF24_1MBPS);
+    radio.setPALevel(RF24_PA_HIGH);
     radio.setPayloadSize(8);
     radio.disableDynamicPayloads();
     radio.setAutoAck(false);
     radio.setRetries(0, 0);
     radio.setChannel(100);
+    // Only assert IRQ pin on RX data received; mask TX-done and max-retries
+    radio.maskIRQ(true, true, false);
 
-    // TX writes to RX, listens on RX_TO_TX for sync traffic
+    // Base station only ever transmits to the transmitter station
     radio.openWritingPipe(PIPE_TX_TO_RX);
     radio.openReadingPipe(1, PIPE_RX_TO_TX);
 
@@ -50,216 +52,84 @@ bool RadioController::init() {
 }
 
 // ---------------------------------------------------------------
-// sendSyncRequest()
+// sendSyncPing()
 //
-// Sends PKT_SYNC_REQUEST to the transmitter station, then blocks
-// until it replies with PKT_SYNC_ACK.
-// If timeout_ms is 0, retries indefinitely sending a new request
-// every 100ms. Otherwise waits up to timeout_ms then returns false.
+// Sends PKT_SYNC_PING carrying the base-station's current clock
+// value. No response is expected — the transmitter updates its
+// clock offset on receipt. Sent 3× for reliability.
 // ---------------------------------------------------------------
-bool RadioController::sendSyncRequest(uint32_t timeout_ms) {
-    bool exit_flag = false;
-
-    do {
-        DEBUG_PRINTLN("[SYNC] Sending sync request to transmitter...");
-
-        CommsPacket pkt = CommsPacket(PKT_SYNC_REQUEST, 0);
-        radio.stopListening();
-        delay(1);
-        radio.write(&pkt, sizeof(pkt));
-        delay(1);
-        radio.startListening();
-        delay(1);
-
-        DEBUG_PRINTLN("[SYNC] Waiting for sync acknowledge...");
-
-        // When timeout_ms is 0, listen for 1000ms per attempt then retry.
-        // When timeout_ms is non-zero, use it as the full wait window then exit.
-        uint32_t window = (timeout_ms != 0) ? timeout_ms : 1000;
-        uint32_t ack_deadline = millis() + window;
-
-        CommsPacket ack = CommsPacket(PKT_NO_DATA, 0);
-        while (millis() < ack_deadline) {
-            if (!radio.available()) continue;
-
-            radio.read(&ack, sizeof(ack));
-
-            if (ack.type != PKT_SYNC_ACK) {
-                DEBUG_INFO_PRINTF("[SYNC] Ignoring unexpected packet type: %d\n", ack.type);
-                continue;
-            }
-
-            DEBUG_PRINTLN("[SYNC] Sync acknowledge received.");
-            radio.stopListening();
-            return true;
-        }
-
-        if (timeout_ms != 0) {
-            exit_flag = true;
-        }
-
-    } while (!exit_flag);
-
-    DEBUG_PRINTLN("[SYNC] Timed out waiting for sync acknowledge.");
+void RadioController::sendSyncPing() {
+    CommsPacket pkt(PKT_SYNC_PING, 0);
+    pkt.timestamp = micros();
     radio.stopListening();
-    return false;
-}
-
-// ---------------------------------------------------------------
-// doSyncHandshake()
-//
-// Called after sync request is received:
-//   1. Send ping with TX timestamp
-//   2. Wait for echo
-//   3. Compute one_way_us = RTT / 2
-//   4. Send confirm with one_way_us
-//
-// Returns false on any failure.
-// ---------------------------------------------------------------
-bool RadioController::doSyncHandshake(uint32_t timeout_ms) {
-    DEBUG_PRINTLN("[SYNC] Starting handshake...");
-
-    // Give receiver guaranteed time to get back into RX mode
-    // after it finishes writing the sync request
-    delay(50);
-
-    CommsPacket ping = CommsPacket(PKT_SYNC_PING, 0);
-    ping.timestamp = micros();
-    uint32_t t_send = micros();
-
-    radio.stopListening();
-    delay(1);
-
-    DEBUG_PRINTLN("[SYNC] Sending ping...");
-    if (!radio.write(&ping, sizeof(ping))) {
-        DEBUG_INFO_PRINTLN("[SYNC] Ping TX failed.");
-        radio.startListening();
-        return false;
-    }
-    delay(1);
-
-    DEBUG_PRINTLN("[SYNC] Ping sent, switching to RX for echo...");
-    radio.startListening();
-    delay(1);
-
-    // Wait for echo
-    uint32_t deadline = millis() + timeout_ms;
-    while (millis() < deadline) {
-        if (!radio.available()) continue;
-
-        uint32_t t_recv = micros();
-        CommsPacket echo = CommsPacket(PKT_NO_DATA, 0);
-        radio.read(&echo, sizeof(echo));
-
-        if (echo.type != PKT_SYNC_ECHO) {
-            DEBUG_INFO_PRINTF("[SYNC] Expected PKT_SYNC_ECHO(%d), ignoring.\n", PKT_SYNC_ECHO);
-            continue;
-        }
-
-        if (echo.timestamp != ping.timestamp) {
-            DEBUG_INFO_PRINTLN("[SYNC] Timestamp mismatch, ignoring.");
-            continue;
-        }
-
-        uint32_t rtt        = t_recv - t_send;
-        uint32_t one_way_us = rtt / 2;
-
-        DEBUG_PRINTF("[SYNC] RTT: %lu us  One-way: %lu us\n", rtt, one_way_us);
-
-        // Wait before sending confirm so receiver is back in RX
-        delay(50);
-
-        radio.stopListening();
-        delay(1);
-
-        CommsPacket confirm = CommsPacket(PKT_SYNC_CONFIRM, 0);
-        confirm.timestamp = one_way_us;
-
-        DEBUG_PRINTLN("[SYNC] Sending confirm...");
-        if (!radio.write(&confirm, sizeof(confirm))) {
-            DEBUG_INFO_PRINTLN("[SYNC] Confirm TX failed.");
-            radio.startListening();
-            return false;
-        }
-        delay(1);
-
-        DEBUG_PRINTLN("[SYNC] Handshake complete.");
-        radio.startListening();
-        return true;
-    }
-
-    DEBUG_PRINTLN("[SYNC] Echo timed out.");
-    radio.stopListening();
-    return false;
+    radio.write(&pkt, sizeof(pkt));
+    radio.write(&pkt, sizeof(pkt));
+    radio.write(&pkt, sizeof(pkt));
+    DEBUG_PRINTLN("[SYNC] Ping sent.");
 }
 
 // ---------------------------------------------------------------
 // syncTransmitter()
 //
-// Top-level sync function — call on startup or re-sync.
-// Blocks until sync succeeds or max attempts exceeded.
+// Sends several sync pings on startup so the transmitter can
+// establish its initial clock offset. No ACK needed — one-way.
+// Always succeeds once the radio is initialised.
 // ---------------------------------------------------------------
 bool RadioController::syncTransmitter(uint8_t max_attempts, uint32_t request_timeout_ms) {
-    for (uint8_t attempt = 1; attempt <= max_attempts; attempt++) {
-        DEBUG_PRINTF("[SYNC] Attempt %u of %u\n", attempt, max_attempts);
-
-        if (!sendSyncRequest(request_timeout_ms)) continue;
-        if (!doSyncHandshake(100)) continue;
-
-        synced = true;
-        return true;
+    DEBUG_PRINTLN("[SYNC] Sending initial sync pings (one-way)...");
+    for (uint8_t i = 0; i < 5; i++) {
+        sendSyncPing();
+        delay(10);  // let transmitter drain FIFO between bursts
     }
-
-    DEBUG_PRINTLN("[SYNC] All attempts failed.");
-    return false;
+    synced = true;
+    DEBUG_PRINTLN("[SYNC] Initial sync pings sent.");
+    return true;
 }
 
 // ---------------------------------------------------------------
 // sendTrigger()
+//
+// 1. Sends a sync ping so the transmitter has a fresh clock offset.
+// 2. Waits briefly for the transmitter to process the ping.
+// 3. Fires the local trigger pin and sends PKT_TRIGGER 3× (burst).
 // ---------------------------------------------------------------
 bool RadioController::sendTrigger() {
+    // Refresh clock sync immediately before trigger (one-way, no ACK)
+    sendSyncPing();
+
+    // Give the transmitter time to drain the ping FIFO before trigger packets arrive.
+    // 3× ping burst at 1 Mbps takes ~750 µs; 5 ms gap gives the transmitter enough time
+    // to fully process the ping FIFO (including any Serial debug output) before the
+    // trigger packets arrive — avoiding both being drained in the same FIFO sweep.
+    //delay(5);
+
     digitalWrite(trigger_pin, HIGH);
     uint32_t fire_time = micros();
 
-    DEBUG_PRINTF("[TX] Trigger sent at %lu us\n", fire_time);
+    DEBUG_PRINTF("[TX] Trigger fired at %lu us\n", fire_time);
 
-    CommsPacket pkt = CommsPacket(PKT_TRIGGER, 0);
+    CommsPacket pkt(PKT_TRIGGER, 0);
     pkt.timestamp = fire_time;
 
-    radio.stopListening();
-    bool ok = radio.write(&pkt, sizeof(pkt));
+    // radio is already in TX mode from sendSyncPing()
+    radio.write(&pkt, sizeof(pkt));
+    radio.write(&pkt, sizeof(pkt));
+    radio.write(&pkt, sizeof(pkt));
 
     uint32_t elapsed = micros() - fire_time;
     if (elapsed < 10) delayMicroseconds(10 - elapsed);
 
     digitalWrite(trigger_pin, LOW);
-
-    if (!ok) DEBUG_INFO_PRINTLN("[TX] Trigger packet failed.");
-    return ok;
+    return true;
 }
 
 // ---------------------------------------------------------------
-// listenForSyncRequests()
+// onRadioIRQ()
+//
+// Radio IRQ handler — captures packet arrival time.
+// Used by doSyncHandshake() for accurate RTT measurement.
 // ---------------------------------------------------------------
-bool RadioController::listenForSyncRequests() {
-    // Re-sync if receiver requests it mid-operation
-    radio.startListening();
-    CommsPacket pkt = CommsPacket(PKT_NO_DATA, 0);
-
-    if (radio.available()) {
-        radio.read(&pkt, sizeof(pkt));
-        if (pkt.type == PKT_SYNC_REQUEST) {
-            DEBUG_INFO_PRINTLN("[TX] Re-sync requested by receiver.");
-            synced = false;
-            if (!doSyncHandshake()) {
-                DEBUG_INFO_PRINTLN("[TX] Re-sync failed.");
-            } else {
-                synced = true;
-                DEBUG_INFO_PRINTLN("[TX] Re-sync complete.");
-            }
-        }
-        radio.stopListening();
-    }
-
-    return synced;
+void onRadioIRQ() {
+    irq_time     = micros();
+    packet_ready = true;
 }
