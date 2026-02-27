@@ -43,7 +43,9 @@ bool RadioController::init() {
     radio.openReadingPipe(1, PIPE_TX_TO_RX);
 
     DEBUG_PRINTLN("[RADIO] OK.");
+    #ifdef DEBUG
     radio.printDetails();
+    #endif
     return true;
 }
 
@@ -55,7 +57,7 @@ bool RadioController::init() {
 // the handshake ping. Returns false on timeout.
 // ---------------------------------------------------------------
 bool RadioController::waitForSyncRequest(uint32_t timeout_ms) {
-    Serial.println(F("[SYNC] Waiting for sync request from base station..."));
+    DEBUG_INFO_PRINTLN("[SYNC] Waiting for sync request from base station...");
 
     radio.startListening();
 
@@ -67,12 +69,11 @@ bool RadioController::waitForSyncRequest(uint32_t timeout_ms) {
         radio.read(&pkt, sizeof(pkt));
 
         if (pkt.type != PKT_SYNC_REQUEST) {
-            Serial.print(F("[SYNC] Ignoring unexpected packet type: "));
-            Serial.println(pkt.type);
+            DEBUG_INFO_PRINTF("[SYNC] Ignoring unexpected packet type: %d\n", pkt.type);
             continue;
         }
 
-        Serial.println(F("[SYNC] Sync request received. Sending acknowledge..."));
+        DEBUG_INFO_PRINTLN("[SYNC] Sync request received. Sending acknowledge...");
 
         CommsPacket ack = CommsPacket(PKT_SYNC_ACK, 0);
         radio.stopListening();
@@ -84,11 +85,11 @@ bool RadioController::waitForSyncRequest(uint32_t timeout_ms) {
         // giving guaranteed time to settle into listen mode
         radio.startListening();
         delay(1);
-        Serial.println(F("[SYNC] Acknowledge sent. Listening for ping..."));
+        DEBUG_INFO_PRINTLN("[SYNC] Acknowledge sent. Listening for ping...");
         return true;
     }
 
-    Serial.println(F("[SYNC] Timed out waiting for sync request."));
+    DEBUG_INFO_PRINTLN("[SYNC] Timed out waiting for sync request.");
     return false;
 }
 
@@ -115,13 +116,11 @@ bool RadioController::doSyncHandshake(uint32_t timeout_ms) {
         if (!radio.available()) continue;
 
         uint32_t local_rx_time = micros();
-        // Read ping packer
+        // Read ping packet
         radio.read(&pkt, sizeof(pkt));
 
         if (pkt.type != PKT_SYNC_PING) {
-            Serial.print(F("[SYNC] Expected PKT_SYNC_PING("));
-            Serial.print(PKT_SYNC_PING);
-            Serial.println(F("), ignoring."));
+            DEBUG_INFO_PRINTF("[SYNC] Expected PKT_SYNC_PING(%d), ignoring.\n", PKT_SYNC_PING);
             continue;
         }
         // Save RX (local) and TX (transmitter) time
@@ -129,15 +128,14 @@ bool RadioController::doSyncHandshake(uint32_t timeout_ms) {
         stashed_tx_time = pkt.timestamp; //! Contains the TX timestamp
         got_ping = true;
 
-        Serial.print(F("[SYNC] Ping OK. tx_timestamp_us="));
-        Serial.println(pkt.timestamp);
+        DEBUG_INFO_PRINTF("[SYNC] Ping OK. tx_timestamp_us=%lu\n", pkt.timestamp);
 
         // Switch to TX to echo — transmitter is now in RX waiting for echo
         radio.stopListening();
         delay(1);
 
         //! Change packet type and send echo packet
-        Serial.println(F("[SYNC] Sending echo..."));
+        DEBUG_PRINTLN("[SYNC] Sending echo...");
         pkt.type = PKT_SYNC_ECHO;
         radio.write(&pkt, sizeof(pkt));
         delay(1);
@@ -145,11 +143,11 @@ bool RadioController::doSyncHandshake(uint32_t timeout_ms) {
         // Back to receive mode for confirm — transmitter waits 50ms before sending it
         radio.startListening();
         delay(1);
-        Serial.println(F("[SYNC] Echo sent. Listening for confirm..."));
+        DEBUG_PRINTLN("[SYNC] Echo sent. Listening for confirm...");
     }
 
     if (!got_ping) {
-        Serial.println(F("[SYNC] Timed out waiting for ping."));
+        DEBUG_INFO_PRINTLN("[SYNC] Timed out waiting for ping.");
         return false;
     }
 
@@ -162,9 +160,7 @@ bool RadioController::doSyncHandshake(uint32_t timeout_ms) {
         radio.read(&pkt, sizeof(pkt));
 
         if (pkt.type != PKT_SYNC_CONFIRM) {
-            Serial.print(F("[SYNC] Expected PKT_SYNC_CONFIRM("));
-            Serial.print(PKT_SYNC_CONFIRM);
-            Serial.println(F("), ignoring."));
+            DEBUG_INFO_PRINTF("[SYNC] Expected PKT_SYNC_CONFIRM(%d), ignoring.\n", PKT_SYNC_CONFIRM);
             continue;
         }
 
@@ -173,15 +169,15 @@ bool RadioController::doSyncHandshake(uint32_t timeout_ms) {
         clock_offset_us = (int32_t)(stashed_rx_time)
                         - (int32_t)(stashed_tx_time + pkt.timestamp);
 
-        Serial.print(F("[SYNC] one_way_us="));    Serial.println(pkt.timestamp);
-        Serial.print(F("[SYNC] clock_offset_us=")); Serial.println(clock_offset_us);
-        Serial.println(F("[SYNC] Sync complete."));
+        DEBUG_INFO_PRINTF("[SYNC] one_way_us=%lu\n", pkt.timestamp);
+        DEBUG_INFO_PRINTF("[SYNC] clock_offset_us=%ld\n", clock_offset_us);
+        DEBUG_INFO_PRINTLN("[SYNC] Sync complete.");
 
         radio.startListening();
         return true;
     }
 
-    Serial.println(F("[SYNC] Confirm timed out."));
+    DEBUG_INFO_PRINTLN("[SYNC] Confirm timed out.");
     return false;
 }
 
@@ -196,10 +192,7 @@ bool RadioController::syncReceiver(uint8_t max_attempts) {
     bool exit_flag = false;
     uint8_t attempt = 1;
     do{
-        Serial.print(F("[SYNC] Attempt ")); 
-        Serial.print(attempt);
-        Serial.print(F(" of ")); 
-        Serial.println(max_attempts);
+        DEBUG_INFO_PRINTF("[SYNC] Attempt %u of %u\n", attempt, max_attempts);
 
         if(max_attempts!=0){
           attempt+=1;
@@ -215,7 +208,7 @@ bool RadioController::syncReceiver(uint8_t max_attempts) {
 
     }while(!exit_flag);
 
-    Serial.println(F("[SYNC] All attempts failed."));
+    DEBUG_INFO_PRINTLN("[SYNC] All attempts failed.");
     return false;
 }
 
@@ -227,19 +220,19 @@ bool RadioController::syncReceiver(uint8_t max_attempts) {
 //   PKT_SYNC_REQUEST → acknowledge + doSyncHandshake()
 //   PKT_TRIGGER      → latency-compensated trigger pulse
 // ---------------------------------------------------------------
-void RadioController::handleRadioPacket() {
+void RadioController::handleRadioPacket(LedControl &leds) {
     if (!packet_ready) return;
 
     packet_ready = false;
     uint32_t local_rx_time = irq_time;
 
     if (!radio.available()) return;
-
+    leds.setPulseTrig(true);
     CommsPacket pkt = CommsPacket(PKT_NO_DATA, 0);
     radio.read(&pkt, sizeof(pkt));
 
     if (pkt.type == PKT_SYNC_REQUEST) {
-        Serial.println(F("[SYNC] Re-sync request received. Sending acknowledge..."));
+        DEBUG_INFO_PRINTLN("[SYNC] Re-sync request received. Sending acknowledge...");
 
         CommsPacket ack = CommsPacket(PKT_SYNC_ACK, 0);
         radio.stopListening();
@@ -249,14 +242,14 @@ void RadioController::handleRadioPacket() {
         radio.startListening();
         delay(1);
 
-        Serial.println(F("[SYNC] Acknowledge sent. Starting handshake..."));
+        DEBUG_INFO_PRINTLN("[SYNC] Acknowledge sent. Starting handshake...");
 
         if (doSyncHandshake()) {
             synced = true;
-            Serial.println(F("[SYNC] Re-sync complete."));
+            DEBUG_INFO_PRINTLN("[SYNC] Re-sync complete.");
         } else {
             synced = false;
-            Serial.println(F("[SYNC] Re-sync handshake failed."));
+            DEBUG_INFO_PRINTLN("[SYNC] Re-sync handshake failed.");
         }
         return;
     }
@@ -265,22 +258,17 @@ void RadioController::handleRadioPacket() {
         uint32_t local_tx_time = (uint32_t)((int32_t)pkt.timestamp + clock_offset_us);
         uint32_t elapsed_us    = local_rx_time - local_tx_time;
 
-        //Serial.println("~~~~~");
-        //Serial.println(elapsed_us);
-        //Serial.println(elapsed_us/1000.0, 2);
-        //Serial.println(LATENCY_COMPENSATION_US - elapsed_us);
-        //Serial.println(LATENCY_COMPENSATION_US);
-
         if (elapsed_us < LATENCY_COMPENSATION_US) {
             delayMicroseconds(LATENCY_COMPENSATION_US - elapsed_us);
-            Serial.println(F("[TRIGGER] Delayed trigger signal"));
-            Serial.print(F("[TRIGGER] Elapsed time (ms): ")); Serial.println(elapsed_us/1000.0, 2);
+            DEBUG_INFO_PRINTLN("[TRIGGER] Delayed trigger signal");
+            DEBUG_INFO_PRINTF("[TRIGGER] Elapsed time (us): %lu\n", elapsed_us);
         }
 
         digitalWrite(trigger_pin, HIGH);
         delayMicroseconds(300);
         digitalWrite(trigger_pin, LOW);
     }
+    leds.setPulseTrig(false);
 }
 
 // ---------------------------------------------------------------
@@ -291,5 +279,5 @@ void RadioController::handleRadioPacket() {
 void onRadioIRQ() {
     irq_time     = micros();
     packet_ready = true;
-    //uint9_t flags = radio.clearStatusFlags(); 
+    //uint9_t flags = radio.clearStatusFlags();
 }

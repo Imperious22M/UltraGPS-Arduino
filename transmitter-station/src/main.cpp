@@ -62,6 +62,6 @@ void setup()
 
 void loop()
 {
-  radioCtrl.handleRadioPacket();
+  radioCtrl.handleRadioPacket(leds);
 }
 

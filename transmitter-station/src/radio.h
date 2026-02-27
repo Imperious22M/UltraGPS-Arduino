@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <RF24.h>
 #include "debug_macros.h"
+#include "led_control.h"
 
 // ---------------------------------------------------------------
 // Pipe addresses
@@ -42,7 +43,7 @@ struct CommsPacket {
 //! BUT THE DELAY IS REQUIRED FOR THE RECEIVERS TO
 //! PROPERLY GO INTO THEIR MEASUREMENT CYCLE AND ASSERT THE ECHO PIN
 //! So if this is too small you get a dead zone around the receivers
-constexpr uint32_t LATENCY_COMPENSATION_US = 1000;
+constexpr uint32_t LATENCY_COMPENSATION_US = 2000;
 
 //! IRQ variables
 volatile static bool     packet_ready = false;
@@ -61,7 +62,7 @@ public:
     bool waitForSyncRequest(uint32_t timeout_ms = 1000);
     bool doSyncHandshake(uint32_t timeout_ms = 1000);
     bool syncReceiver(uint8_t max_attempts = 5);
-    void handleRadioPacket();
+    void handleRadioPacket(LedControl &leds);
 
 private:
     RF24    radio;

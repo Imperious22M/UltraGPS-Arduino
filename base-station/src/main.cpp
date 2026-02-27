@@ -65,7 +65,7 @@ uint16_t transmitDelay = 1;
 //! Makes the measure_echo_times tick count loop
 //! Exit as soon as all 0's are detected in the PINC
 //! register (When all receivers have received)
-//#define ECHO_EARLY_EXIT
+#define ECHO_EARLY_EXIT
 
 //! Instantiate all classes
 RadioController radioCtrl(9, 10, 5);  //! CE, CSN, Trigger pins
@@ -157,7 +157,10 @@ void measure_echo_times() {
     //noInterrupts();
 
     //! This determines the "count" value for each sensor
-    constexpr long max_tick_val = 0x31000;
+    //constexpr long max_tick_val = 0x31000;
+    //! The total time that it is looping here is way too large
+    //! WARN
+    constexpr long max_tick_val = 0x31000/4; //! About 300/N ms of sampling time
     constexpr byte ALL_ECHOES = 63;  //! All 6 echo pins (bits 0-5)
     byte seen_all_high = 0;  //! Track if we've seen all echoes go HIGH
 
@@ -255,10 +258,12 @@ void simulate_echo_times() {
 // ---------------------------------------------------------------------------
 
 void onPulse(const CmdArg*) {
+
     radioCtrl.syncTransmitter(1, 1000);
-    delay(50);
+    delay(random(20,50));
+    //delay(20);
     bool success = radioCtrl.sendTrigger();
-    measure_echo_times();
+    measure_echo_times(); //! Most of the slow down is here
 
     leds.setPulseTrig(success);
 
@@ -270,6 +275,7 @@ void onPulse(const CmdArg*) {
     Serial.println(this_ticks[5]);
 
     delay(transmitDelay);
+
 }
 
 void onSimulate(const CmdArg*) {
