@@ -44,7 +44,7 @@ void setup()
     attachInterrupt(digitalPinToInterrupt(radioIRQPin), onRadioIRQ, FALLING);
   }
 
-  if (!radioCtrl.syncReceiver()) {
+  if (!radioCtrl.syncReceiver(0)) {
     DEBUG_INFO_PRINTLN("[ERROR] Sync failed. Halting.");
     while (true) {
       DEBUG_INFO_PRINTLN("[ERROR] Still halted.");
@@ -62,6 +62,6 @@ void setup()
 
 void loop()
 {
-  radioCtrl.handleTrigger();
+  radioCtrl.handleRadioPacket();
 }
 

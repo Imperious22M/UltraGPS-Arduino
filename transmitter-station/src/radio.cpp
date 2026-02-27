@@ -48,26 +48,48 @@ bool RadioController::init() {
 }
 
 // ---------------------------------------------------------------
-// requestSync()
+// waitForSyncRequest()
 //
-// Sends PKT_SYNC_REQUEST to transmitter to kick off the handshake.
-// Always returns true due to auto-ack being disabled in radio settings
+// Blocks until the base station sends PKT_SYNC_REQUEST.
+// Replies with PKT_SYNC_ACK then switches back to RX, ready for
+// the handshake ping. Returns false on timeout.
 // ---------------------------------------------------------------
-bool RadioController::requestSync() {
-    Serial.println(F("[SYNC] Sending sync request..."));
+bool RadioController::waitForSyncRequest(uint32_t timeout_ms) {
+    Serial.println(F("[SYNC] Waiting for sync request from base station..."));
 
-    CommsPacket pkt = CommsPacket(PKT_SYNC_REQUEST,0);
-    radio.stopListening();
-    delayMicroseconds(130);
-
-    radio.write(&pkt, sizeof(pkt));
-    // Switch to RX immediately and stay there —
-    // the transmitter will wait 50ms before sending ping
-    // giving us guaranteed time to get back into listen mode
     radio.startListening();
-    delayMicroseconds(130);
-    Serial.println(F("[SYNC] Listening for ping..."));
-    return true;
+
+    CommsPacket pkt = CommsPacket(PKT_NO_DATA, 0);
+    uint32_t deadline = millis() + timeout_ms;
+    while (millis() < deadline) {
+        if (!radio.available()) continue;
+
+        radio.read(&pkt, sizeof(pkt));
+
+        if (pkt.type != PKT_SYNC_REQUEST) {
+            Serial.print(F("[SYNC] Ignoring unexpected packet type: "));
+            Serial.println(pkt.type);
+            continue;
+        }
+
+        Serial.println(F("[SYNC] Sync request received. Sending acknowledge..."));
+
+        CommsPacket ack = CommsPacket(PKT_SYNC_ACK, 0);
+        radio.stopListening();
+        delay(1);
+        radio.write(&ack, sizeof(ack));
+        delay(1);
+
+        // Switch back to RX — base station will wait 50ms before sending ping,
+        // giving guaranteed time to settle into listen mode
+        radio.startListening();
+        delay(1);
+        Serial.println(F("[SYNC] Acknowledge sent. Listening for ping..."));
+        return true;
+    }
+
+    Serial.println(F("[SYNC] Timed out waiting for sync request."));
+    return false;
 }
 
 // ---------------------------------------------------------------
@@ -80,7 +102,7 @@ bool RadioController::requestSync() {
 //   4. Compute clock_offset_us
 // ---------------------------------------------------------------
 bool RadioController::doSyncHandshake(uint32_t timeout_ms) {
-    // Radio is already in startListening() from requestSync() — don't touch it
+    // Radio is already in startListening() from waitForSyncRequest() — don't touch it
 
     bool got_ping = false;
     uint32_t stashed_rx_time = 0;
@@ -112,16 +134,17 @@ bool RadioController::doSyncHandshake(uint32_t timeout_ms) {
 
         // Switch to TX to echo — transmitter is now in RX waiting for echo
         radio.stopListening();
-        delayMicroseconds(130);
+        delay(1);
 
-        //! Change packet type and send echo packet        
+        //! Change packet type and send echo packet
         Serial.println(F("[SYNC] Sending echo..."));
         pkt.type = PKT_SYNC_ECHO;
         radio.write(&pkt, sizeof(pkt));
+        delay(1);
 
         // Back to receive mode for confirm — transmitter waits 50ms before sending it
         radio.startListening();
-        delayMicroseconds(130);
+        delay(1);
         Serial.println(F("[SYNC] Echo sent. Listening for confirm..."));
     }
 
@@ -136,7 +159,6 @@ bool RadioController::doSyncHandshake(uint32_t timeout_ms) {
     while (millis() < confirm_deadline) {
         if (!radio.available()) continue;
 
-        //uint8_t buf[8] = {};
         radio.read(&pkt, sizeof(pkt));
 
         if (pkt.type != PKT_SYNC_CONFIRM) {
@@ -167,7 +189,7 @@ bool RadioController::doSyncHandshake(uint32_t timeout_ms) {
 // syncReceiver()
 //
 // Top-level sync function — call on startup or re-sync.
-// Sends request then performs handshake.
+// Waits for requests then performs handshake.
 // If max_attempts is zero, then it will try indefinetly
 // ---------------------------------------------------------------
 bool RadioController::syncReceiver(uint8_t max_attempts) {
@@ -186,7 +208,7 @@ bool RadioController::syncReceiver(uint8_t max_attempts) {
           exit_flag = true;
         }
 
-        if (!requestSync()) continue;
+        if (!waitForSyncRequest()) continue;
         if (!doSyncHandshake()) continue;
         synced = true;
         return true;
@@ -198,40 +220,67 @@ bool RadioController::syncReceiver(uint8_t max_attempts) {
 }
 
 // ---------------------------------------------------------------
-// handleTrigger()
+// handleRadioPacket()
+//
+// Called from loop() when the radio IRQ has fired (packet_ready).
+// Reads the packet once and dispatches on type:
+//   PKT_SYNC_REQUEST → acknowledge + doSyncHandshake()
+//   PKT_TRIGGER      → latency-compensated trigger pulse
 // ---------------------------------------------------------------
-void RadioController::handleTrigger() {
-    if (!packet_ready || !synced) return;
+void RadioController::handleRadioPacket() {
+    if (!packet_ready) return;
 
-    //! May need a call to noInterrupts() here if packet_ready and irq_time need to be read atomically, 
-    //! but in testing it seems to work fine without it 
-    //! something to keep in mind if weird behavior around the trigger is seen timing
     packet_ready = false;
-
     uint32_t local_rx_time = irq_time;
 
     if (!radio.available()) return;
 
-    CommsPacket pkt = CommsPacket(PKT_TRIGGER,0);
+    CommsPacket pkt = CommsPacket(PKT_NO_DATA, 0);
     radio.read(&pkt, sizeof(pkt));
 
     if (pkt.type == PKT_SYNC_REQUEST) {
-        // Shouldn't happen, but guard against stale packets
+        Serial.println(F("[SYNC] Re-sync request received. Sending acknowledge..."));
+
+        CommsPacket ack = CommsPacket(PKT_SYNC_ACK, 0);
+        radio.stopListening();
+        delay(1);
+        radio.write(&ack, sizeof(ack));
+        delay(1);
+        radio.startListening();
+        delay(1);
+
+        Serial.println(F("[SYNC] Acknowledge sent. Starting handshake..."));
+
+        if (doSyncHandshake()) {
+            synced = true;
+            Serial.println(F("[SYNC] Re-sync complete."));
+        } else {
+            synced = false;
+            Serial.println(F("[SYNC] Re-sync handshake failed."));
+        }
         return;
     }
 
-    if (pkt.type != PKT_TRIGGER) return;
+    if (pkt.type == PKT_TRIGGER && synced) {
+        uint32_t local_tx_time = (uint32_t)((int32_t)pkt.timestamp + clock_offset_us);
+        uint32_t elapsed_us    = local_rx_time - local_tx_time;
 
-    uint32_t local_tx_time = (uint32_t)((int32_t)pkt.timestamp + clock_offset_us);
-    uint32_t elapsed_us    = local_rx_time - local_tx_time;
+        //Serial.println("~~~~~");
+        //Serial.println(elapsed_us);
+        //Serial.println(elapsed_us/1000.0, 2);
+        //Serial.println(LATENCY_COMPENSATION_US - elapsed_us);
+        //Serial.println(LATENCY_COMPENSATION_US);
 
-    if (elapsed_us < LATENCY_COMPENSATION_US) {
-        delayMicroseconds(LATENCY_COMPENSATION_US - elapsed_us);
+        if (elapsed_us < LATENCY_COMPENSATION_US) {
+            delayMicroseconds(LATENCY_COMPENSATION_US - elapsed_us);
+            Serial.println(F("[TRIGGER] Delayed trigger signal"));
+            Serial.print(F("[TRIGGER] Elapsed time (ms): ")); Serial.println(elapsed_us/1000.0, 2);
+        }
+
+        digitalWrite(trigger_pin, HIGH);
+        delayMicroseconds(300);
+        digitalWrite(trigger_pin, LOW);
     }
-
-    digitalWrite(trigger_pin, HIGH);
-    delayMicroseconds(300);
-    digitalWrite(trigger_pin, LOW);
 }
 
 // ---------------------------------------------------------------
@@ -242,4 +291,5 @@ void RadioController::handleTrigger() {
 void onRadioIRQ() {
     irq_time     = micros();
     packet_ready = true;
+    //uint9_t flags = radio.clearStatusFlags(); 
 }

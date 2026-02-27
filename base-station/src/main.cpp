@@ -60,7 +60,7 @@ constexpr uint8_t RECV_CNT = sizeof(ECHO_PIN)/sizeof(ECHO_PIN[0]);
 constexpr unsigned int BAUD_RATE  = 38400;
 
 //! Minimum delay between sending a trigger activations (milliseconds) — mutable via 'D' command
-uint16_t transmitDelay = 200;
+uint16_t transmitDelay = 1;
 
 //! Makes the measure_echo_times tick count loop
 //! Exit as soon as all 0's are detected in the PINC
@@ -107,19 +107,19 @@ void setup()
 
   // Initialize radio and synchronize transmitters clocks
   if (!radioCtrl.init()) {
-    DEBUG_INFO_PRINTLN("[ERROR] Radio init failed. Halting.");
+    Serial.println(F("[ERROR] Radio init failed. Halting."));
     while (true) {
-      DEBUG_INFO_PRINTLN("[ERROR] Still halted.");
+      Serial.println(F("[ERROR] Still halted."));
       leds.setRadioStatus(true);
       delay(1000);
       leds.setRadioStatus(false);
       delay(1000);
     }
   }
-  if (!radioCtrl.syncTransmitter()) {
-    DEBUG_INFO_PRINTLN("[ERROR] Sync failed. Halting.");
+  if (!radioCtrl.syncTransmitter(5,0)) {
+    Serial.println(F("[ERROR] Sync failed. Halting."));
     while (true) {
-      DEBUG_INFO_PRINTLN("[ERROR] Still halted.");
+      Serial.println(F("[ERROR] Still halted."));
       leds.setRadioStatus(true);
       delay(1000);
       leds.setRadioStatus(false);
@@ -129,6 +129,7 @@ void setup()
 
   //! Radio initialized successfully - keep RADIO_STATUS LED on
   leds.setRadioStatus(true);
+  //Serial.println(F("[SETUP] Ready."));
 
 }
 
@@ -146,12 +147,14 @@ void measure_echo_times() {
 
     unsigned int max, j;
     byte bits;
-    const char text[] = "Ping\n";
+    //const char text[] = "Ping\n";
 
     nwp=0;
     this_value=previous_value=0;
 
-    noInterrupts();
+    //! Interrupts HAVE to be enabled to allow micros() to work
+    //! If this is disabled, the time synchronization will not work
+    //noInterrupts();
 
     //! This determines the "count" value for each sensor
     constexpr long max_tick_val = 0x31000;
@@ -185,7 +188,7 @@ void measure_echo_times() {
 
       }
     }
-    interrupts();
+    //interrupts();
     DEBUG_PRINTF("nwp: %u\n", nwp);
     DEBUG_PRINTF("highest tick: %lu\n", my_ticks);
 
@@ -252,16 +255,12 @@ void simulate_echo_times() {
 // ---------------------------------------------------------------------------
 
 void onPulse(const CmdArg*) {
+    radioCtrl.syncTransmitter(1, 1000);
+    delay(50);
     bool success = radioCtrl.sendTrigger();
     measure_echo_times();
 
     leds.setPulseTrig(success);
-
-    if (success) {
-        DEBUG_PRINTLN("Message sent successfully!");
-    } else {
-        DEBUG_PRINTLN("Message failed to send!");
-    }
 
     Serial.print(this_ticks[0]);   Serial.print(", ");
     Serial.print(this_ticks[1]);   Serial.print(", ");
@@ -292,7 +291,9 @@ void onSimulate(const CmdArg*) {
 
 void onSetDelay(const CmdArg* args) {
     transmitDelay = (uint16_t)args[0].i;
-    DEBUG_INFO_PRINTF("Transmit delay set to %u ms\n", transmitDelay);
+    Serial.print(F("Transmit delay set to "));
+    Serial.print(transmitDelay);
+    Serial.println(F(" ms"));
 }
 
 // ---------------------------------------------------------------------------

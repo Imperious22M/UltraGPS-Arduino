@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 //! Enable debug mode
-#define DEBUG
+//#define DEBUG
 
 // ---------------------------------------------------------------
 // Usage:
