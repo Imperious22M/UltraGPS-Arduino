@@ -73,7 +73,7 @@ bool RadioController::sendSyncRequest(uint32_t timeout_ms) {
 
         DEBUG_PRINTLN("[SYNC] Waiting for sync acknowledge...");
 
-        // When timeout_ms is 0, listen for 100ms per attempt then retry.
+        // When timeout_ms is 0, listen for 1000ms per attempt then retry.
         // When timeout_ms is non-zero, use it as the full wait window then exit.
         uint32_t window = (timeout_ms != 0) ? timeout_ms : 1000;
         uint32_t ack_deadline = millis() + window;
@@ -204,7 +204,7 @@ bool RadioController::syncTransmitter(uint8_t max_attempts, uint32_t request_tim
         DEBUG_PRINTF("[SYNC] Attempt %u of %u\n", attempt, max_attempts);
 
         if (!sendSyncRequest(request_timeout_ms)) continue;
-        if (!doSyncHandshake()) continue;
+        if (!doSyncHandshake(100)) continue;
 
         synced = true;
         return true;

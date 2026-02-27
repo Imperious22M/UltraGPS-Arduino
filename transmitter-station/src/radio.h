@@ -59,8 +59,8 @@ public:
     RadioController(uint8_t ce_pin, uint8_t csn_pin, uint8_t trigger_pin, uint8_t fail_threshold = 5);
 
     bool init();
-    bool waitForSyncRequest(uint32_t timeout_ms = 1000);
-    bool doSyncHandshake(uint32_t timeout_ms = 1000);
+    bool waitForSyncRequest(uint32_t timeout_ms = 2000);
+    bool doSyncHandshake(uint32_t timeout_ms = 2000);
     bool syncReceiver(uint8_t max_attempts = 5);
     void handleRadioPacket(LedControl &leds);
 
