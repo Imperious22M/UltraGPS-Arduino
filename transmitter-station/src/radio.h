@@ -4,7 +4,6 @@
 #include <Arduino.h>
 #include <RF24.h>
 #include "debug_macros.h"
-#include "led_control.h"
 
 // ---------------------------------------------------------------
 // Pipe addresses
@@ -16,13 +15,8 @@ const uint64_t PIPE_RX_TO_TX = 0xF0F0F0F0E2LL;  // receiver   → transmitter
 // Packet types
 // ---------------------------------------------------------------
 enum PacketType : uint8_t {
-    PKT_SYNC_REQUEST  = 0,   // BS → TX  "I want to sync"
-    PKT_SYNC_ACK      = 1,   // TX → BS  "request received, ready"
-    PKT_SYNC_PING     = 2,   // BS → TX  ping with BS timestamp
-    PKT_SYNC_ECHO     = 3,   // TX → BS  echo ping back
-    PKT_SYNC_CONFIRM  = 4,   // BS → TX  one-way latency result
-    PKT_TRIGGER       = 5,   // BS → TX  fire trigger
-    PKT_NO_DATA       = 6    // Used just for initialization
+    PKT_NO_DATA       = 1,   // Used just for initialization
+    PKT_TRIGGER    = 2    // TX → RX  broadcast current timer value
 };
 
 // Packet structure between base station and ultrasonic transmitter
@@ -30,45 +24,32 @@ enum PacketType : uint8_t {
 struct CommsPacket {
     PacketType type;
     uint8_t _pad[3] = {};
-    uint32_t timestamp;
+    uint16_t timestamp;
+    uint16_t tick_delay;
 
+    //! Constructors
+    CommsPacket() : type(PKT_NO_DATA), timestamp(0), tick_delay(0) {}
     CommsPacket(PacketType rType, uint32_t rTime_ms)
-        : type(rType), timestamp(rTime_ms) {}
+        : type(rType), timestamp(rTime_ms), tick_delay(0) {}
+    CommsPacket(PacketType rType, uint16_t rTime_ms, uint16_t rTick_delay)
+        : type(rType), timestamp(rTime_ms), tick_delay(rTick_delay) {}
 };
-
-//! Microsecond time that the trigger signal will wait compared
-//! to the trigger signal sent by the base station
-//! THIS CAN BE MUCH SHORTER, IT IS POSSIBLE TO
-//! OBTAIN TIME SYNC SIGNALS WITH U_S PRECISION
-//! BUT THE DELAY IS REQUIRED FOR THE RECEIVERS TO
-//! PROPERLY GO INTO THEIR MEASUREMENT CYCLE AND ASSERT THE ECHO PIN
-//! So if this is too small you get a dead zone around the receivers
-constexpr uint32_t LATENCY_COMPENSATION_US = 2000;
-
-//! IRQ variables
-volatile static bool     packet_ready = false;
-volatile static uint32_t irq_time     = 0;
-// IRQ function or radio
-void onRadioIRQ();
 
 // ---------------------------------------------------------------
 // RadioController
 // ---------------------------------------------------------------
 class RadioController {
 public:
-    RadioController(uint8_t ce_pin, uint8_t csn_pin, uint8_t trigger_pin, uint8_t fail_threshold = 5);
+    RadioController(uint8_t ce_pin, uint8_t csn_pin);
 
-    bool init();
-    bool waitForSyncRequest(uint32_t timeout_ms = 2000);
-    bool doSyncHandshake(uint32_t timeout_ms = 2000);
-    bool syncReceiver(uint8_t max_attempts = 5);
-    void handleRadioPacket(LedControl &leds);
+    bool init(bool as_receiver = false);
+    bool sendTrigger(uint16_t timer_val, uint16_t tick_delay);
+    bool receiveTrigger(uint16_t &out_timer_val, uint16_t &out_tick_delay);
+    void clearIRQFlags(bool &tx_ok, bool &tx_fail, bool &rx_ready);
 
 private:
     RF24    radio;
-    bool    synced;
-    uint8_t trigger_pin;
-    int32_t clock_offset_us = 0;
+    bool _readPacket(CommsPacket &pkt_out);
 };
 
 #endif
