@@ -35,6 +35,21 @@ struct CommsPacket {
         : type(rType), timestamp(rTime_ms), tick_delay(rTick_delay) {}
 };
 
+//! Microsecond time that the trigger signal will wait compared
+//! to the trigger signal sent by the base station
+//! THIS CAN BE MUCH SHORTER, IT IS POSSIBLE TO
+//! OBTAIN TIME SYNC SIGNALS WITH U_S PRECISION
+//! BUT THE DELAY IS REQUIRED FOR THE RECEIVERS TO
+//! PROPERLY GO INTO THEIR MEASUREMENT CYCLE AND ASSERT THE ECHO PIN
+//! So if this is too small you get a dead zone around the receivers
+constexpr uint32_t LATENCY_COMPENSATION_US = 4000;
+
+//! IRQ variables
+volatile static bool     packet_ready = false;
+volatile static uint32_t irq_time     = 0;
+// IRQ function or radio
+void onRadioIRQ();
+
 // ---------------------------------------------------------------
 // RadioController
 // ---------------------------------------------------------------
@@ -42,10 +57,9 @@ class RadioController {
 public:
     RadioController(uint8_t ce_pin, uint8_t csn_pin);
 
-    bool init(bool as_receiver = false);
-    bool sendTrigger(uint16_t timer_val, uint16_t tick_delay);
-    bool receiveTrigger(uint16_t &out_timer_val, uint16_t &out_tick_delay);
-    void clearIRQFlags(bool &tx_ok, bool &tx_fail, bool &rx_ready);
+    bool init();
+    bool syncReceiver(uint8_t max_attempts = 5);
+    void handleRadioPacket(LedControl &leds);
 
 private:
     RF24    radio;

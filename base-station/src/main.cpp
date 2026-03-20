@@ -68,6 +68,7 @@ uint16_t transmitDelay = 1;
 #define ECHO_EARLY_EXIT
 
 //! Instantiate all classes
+constexpr uint8_t radioIRQPin = 2;    //! Must be interrupt-capable (2 or 3 on Uno)
 RadioController radioCtrl(9, 10, 5);  //! CE, CSN, Trigger pins
 LedControl leds(3, 4, 6, 7, 8);      //! STAT_1, STAT_2, STAT_3, PULSE_TRIG, RADIO_STATUS
 
@@ -106,6 +107,7 @@ void setup()
   leds.init(0);
 
   // Initialize radio and synchronize transmitters clocks
+  attachInterrupt(digitalPinToInterrupt(radioIRQPin), onRadioIRQ, FALLING);
   if (!radioCtrl.init()) {
     Serial.println(F("[ERROR] Radio init failed. Halting."));
     while (true) {
@@ -259,9 +261,6 @@ void simulate_echo_times() {
 
 void onPulse(const CmdArg*) {
 
-    radioCtrl.syncTransmitter(1, 1000);
-    delay(random(20,50));
-    //delay(20);
     bool success = radioCtrl.sendTrigger();
     measure_echo_times(); //! Most of the slow down is here
 

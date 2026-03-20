@@ -35,6 +35,11 @@ struct CommsPacket {
         : type(rType), timestamp(rTime_ms) {}
 };
 
+// IRQ variables — set by onRadioIRQ() ISR
+volatile static bool     packet_ready = false;
+volatile static uint32_t irq_time     = 0;
+void onRadioIRQ();
+
 // ---------------------------------------------------------------
 // RadioController
 // ---------------------------------------------------------------
@@ -43,11 +48,9 @@ public:
     RadioController(uint8_t ce_pin, uint8_t csn_pin, uint8_t trigger_pin, uint8_t fail_threshold = 5);
 
     bool init();
-    bool sendSyncRequest(uint32_t timeout_ms = 30000);
-    bool doSyncHandshake(uint32_t timeout_ms = 5000);
+    void sendSyncPing();
     bool syncTransmitter(uint8_t max_attempts = 5, uint32_t request_timeout_ms = 30000);
     bool sendTrigger();
-    bool listenForSyncRequests();
 
 private:
     RF24    radio;
