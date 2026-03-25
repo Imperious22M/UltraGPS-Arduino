@@ -48,6 +48,7 @@ determine distance.
 #include "debug_macros.h"
 #include "led_control.h"
 #include "command_control.h"
+#include "timers.h"
 
 
 //! Base Station Parameters
@@ -62,14 +63,17 @@ constexpr unsigned int BAUD_RATE  = 38400;
 //! Minimum delay between sending a trigger activations (milliseconds) — mutable via 'D' command
 uint16_t transmitDelay = 1;
 
+//! Tick delay sent to receiver: how many Timer1 ticks after the packet arrives to fire the trigger.
+constexpr uint16_t TRIGGER_TICK_DELAY = 100;
+
 //! Makes the measure_echo_times tick count loop
 //! Exit as soon as all 0's are detected in the PINC
 //! register (When all receivers have received)
-#define ECHO_EARLY_EXIT
+//#define ECHO_EARLY_EXIT
 
 //! Instantiate all classes
 constexpr uint8_t radioIRQPin = 2;    //! Must be interrupt-capable (2 or 3 on Uno)
-RadioController radioCtrl(9, 10, 5);  //! CE, CSN, Trigger pins
+RadioController radioCtrl(9, 10);     //! CE, CSN
 LedControl leds(3, 4, 6, 7, 8);      //! STAT_1, STAT_2, STAT_3, PULSE_TRIG, RADIO_STATUS
 
 //! Forward declarations for command callbacks (defined after measure/simulate helpers)
@@ -106,20 +110,16 @@ void setup()
   //! Initialiaze LEDs
   leds.init(0);
 
-  // Initialize radio and synchronize transmitters clocks
-  attachInterrupt(digitalPinToInterrupt(radioIRQPin), onRadioIRQ, FALLING);
+  //! Init Timer1: normal mode, prescaler 1024 (64 µs/tick at 16 MHz)
+  //TCCR1A = 0;
+  //TCCR1B = (1 << CS12) | (1 << CS10);
+  //TCNT1  = 0;
+  timer1_init();
+  pinMode(triggerPin, OUTPUT);
+
+  // Initialize radio
   if (!radioCtrl.init()) {
     Serial.println(F("[ERROR] Radio init failed. Halting."));
-    while (true) {
-      Serial.println(F("[ERROR] Still halted."));
-      leds.setRadioStatus(true);
-      delay(1000);
-      leds.setRadioStatus(false);
-      delay(1000);
-    }
-  }
-  if (!radioCtrl.syncTransmitter(5,0)) {
-    Serial.println(F("[ERROR] Sync failed. Halting."));
     while (true) {
       Serial.println(F("[ERROR] Still halted."));
       leds.setRadioStatus(true);
@@ -154,10 +154,7 @@ void measure_echo_times() {
     nwp=0;
     this_value=previous_value=0;
 
-    //! Interrupts HAVE to be enabled to allow micros() to work
-    //! If this is disabled, the time synchronization will not work
-    //noInterrupts();
-
+    noInterrupts();
     //! This determines the "count" value for each sensor
     //constexpr long max_tick_val = 0x31000;
     //! The total time that it is looping here is way too large
@@ -193,7 +190,7 @@ void measure_echo_times() {
 
       }
     }
-    //interrupts();
+    interrupts();
     DEBUG_PRINTF("nwp: %u\n", nwp);
     DEBUG_PRINTF("highest tick: %lu\n", my_ticks);
 
@@ -261,7 +258,9 @@ void simulate_echo_times() {
 
 void onPulse(const CmdArg*) {
 
-    bool success = radioCtrl.sendTrigger();
+    //! Pulse the trigger pin immediately to get the receivers into receiving mode
+    schedule_trigger(TCNT1, 0);
+    bool success = radioCtrl.sendTrigger(TCNT1, TRIGGER_TICK_DELAY);
     measure_echo_times(); //! Most of the slow down is here
 
     leds.setPulseTrig(success);
@@ -305,6 +304,8 @@ void onSetDelay(const CmdArg* args) {
 
 void loop()
 {
-    cmdCtrl.poll();
-}
+    //cmdCtrl.poll();
+    onPulse(nullptr);
+    delay(100);
+  }
 
