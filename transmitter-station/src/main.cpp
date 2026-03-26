@@ -47,7 +47,7 @@ void setup()
   DEBUG_PRINTLN("=== Receiver Starting ===");
 
   //! Timer setup
-  timer1_init();
+  timer1_init_5Hz();
   //! Pin setup
   pinMode(triggerPin, OUTPUT);
   pinMode(radioIRQPin, INPUT);

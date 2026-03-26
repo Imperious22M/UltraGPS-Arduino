@@ -113,7 +113,7 @@ void setup()
   leds.init(0);
   
   //! Initialize the timers
-  timer1_init();
+  timer1_init_5Hz();
   pinMode(triggerPin, OUTPUT);
 
   // Initialize radio
@@ -315,10 +315,11 @@ void loop()
     long currentTime = millis();
     long lastSyncTime = 0;
 
-    cmdCtrl.poll();
+    //cmdCtrl.poll();
 
     if (currentTime - lastSyncTime >= SYNC_PLL_INTERVAL) {
-        syncPLL();
+        //syncPLL();
+        onPulse(nullptr);  //! For testing, just call the pulse command callback directly to send a trigger and print values
         lastSyncTime = currentTime;
     }
     delay(100);

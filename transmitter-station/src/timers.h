@@ -10,7 +10,8 @@ extern const int triggerPin;
 extern volatile bool trigger_fired;
 
 // Function prototypes
-void timer1_init();
+void timer1_init_10Hz();
+void timer1_init_5Hz();
 
 //! PLL correction: adjust TCNT1 by the given signed error (ticks).
 //! Inline for minimal latency — compiles to a read-add-write on TCNT1.
