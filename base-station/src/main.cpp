@@ -110,7 +110,9 @@ void setup()
   leds.init(0);
   
   //! Initialize the timers
-  timer1_init_10Hz();
+  timer1_init_15Hz();
+  
+  //! Pin Setup
   pinMode(triggerPin, OUTPUT);
 
   // Initialize radio
@@ -194,6 +196,7 @@ void measure_echo_times(bool noInterruptsFlag = false) {
         }
         #endif
       }
+      //! TODO: Move calculations constants out (LIKE TIMER1_TOP*0.8)
       if((int)(TCNT1 - base_tick)%timer1_top >= (uint16_t)(timer1_top*0.8) ) {
         //Serial.println(F("[WARNING] Exiting echo time measurement loop early to avoid overflow."));
         break;
@@ -323,6 +326,7 @@ void onSimulate(const CmdArg*) {
 void syncPLL(){
     //! Send a 0 to skip the processing/activation of a pin on the transmitter
     //! NOT YET IMPLEMENTED
+    //! MAY NOT EVER BE IMPLEMENTED...
     radioCtrl.sendTrigger(TCNT1, 0);
 }
 // ---------------------------------------------------------------------------

@@ -34,6 +34,26 @@ void timer1_init_5Hz() {
     TCNT1  = 0;
     TIMSK1 = (1 << OCIE1A);                 // Enable compare match A interrupt
 }
+//! Initialize Timer1 in CTC mode at approximately 15 Hz.
+//! 16 MHz / prescaler 256 / 4167 = 14.999 Hz (not exactly divisible)
+void timer1_init_15Hz() {
+    TCCR1A = 0;                             // CTC mode: WGM10=0, WGM11=0
+    TCCR1B = (1 << WGM12) | (1 << CS12);   // CTC: WGM12=1; prescaler 256: CS12=1
+    OCR1A  = 4166;                          // Top — counts 0..4166 (4167 counts) ≈ 15 Hz
+    timer1_top = 4166;
+    TCNT1  = 0;
+    TIMSK1 = (1 << OCIE1A);                 // Enable compare match A interrupt
+}
+//! Initialize Timer1 in CTC mode at exactly 20 Hz.
+//! 16 MHz / prescaler 256 / 3125 = 20 Hz
+void timer1_init_20Hz() {
+    TCCR1A = 0;                             // CTC mode: WGM10=0, WGM11=0
+    TCCR1B = (1 << WGM12) | (1 << CS12);   // CTC: WGM12=1; prescaler 256: CS12=1
+    OCR1A  = 3124;                          // Top — counts 0..3124 (3125 counts) = 20 Hz
+    timer1_top = 3124;
+    TCNT1  = 0;
+    TIMSK1 = (1 << OCIE1A);                 // Enable compare match A interrupt
+}
 
 //! Periodic 10 Hz compare match interrupt — fires triggerPin
 ISR(TIMER1_COMPA_vect) {
