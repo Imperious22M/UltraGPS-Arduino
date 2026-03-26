@@ -8,6 +8,7 @@
 
 extern const int triggerPin;
 extern volatile bool trigger_fired;
+extern uint16_t timer1_top;  //! Number of ticks in one full timer cycle (OCR1A+1)
 
 // Function prototypes
 void timer1_init_10Hz();
