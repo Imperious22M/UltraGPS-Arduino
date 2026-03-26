@@ -6,6 +6,11 @@ const int triggerPin = 5;
 volatile bool trigger_fired = false;
 //! Number of ticks in one full timer cycle (OCR1A+1)
 uint16_t timer1_top = 0;
+//! Trigger pulse duration in microseconds
+constexpr unsigned int TRIGGER_PULSE_US = 50;
+//! Tick delay in microseconds to apply to the trigger timing, as specified by the base station
+uint16_t tick_delay = 0;
+
 
 //! Initialize Timer1 in CTC mode at exactly 10 Hz.
 //! 16 MHz / prescaler 256 / (OCR1A+1) = 16000000 / 256 / 6250 = 10 Hz
@@ -30,8 +35,11 @@ void timer1_init_5Hz() {
 
 //! Periodic 10 Hz compare match interrupt — fires triggerPin
 ISR(TIMER1_COMPA_vect) {
+    //! Apply phase delay specified by the base station (if any) before firing the trigger
+    //! Max microsecond delay is 16383
+    delayMicroseconds(tick_delay);
     digitalWrite(triggerPin, HIGH);
-    delayMicroseconds(1000);
+    delayMicroseconds(TRIGGER_PULSE_US);
     digitalWrite(triggerPin, LOW);
     trigger_fired = true;
 }

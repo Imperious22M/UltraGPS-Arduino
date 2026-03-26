@@ -29,10 +29,11 @@ LedControl leds(3, 4, 6, 7, 8);      //! STAT_1, STAT_2, STAT_3, PULSE_TRIG, RAD
 // ---------------------------------------------------------------
 void onRadioIRQ() {
     bool tx_ok, tx_fail, rx_ready;
-    uint16_t timer_val, tick_delay;
+    uint16_t timer_val;
     radio.clearIRQFlags(tx_ok, tx_fail, rx_ready);
 
     if (!rx_ready) return;
+    //! tick_delay is declared externally
     if (!radio.receiveTrigger(timer_val, tick_delay)) return;
 
     // Correct the local timer phase to match the base station
@@ -47,7 +48,7 @@ void setup()
   DEBUG_PRINTLN("=== Receiver Starting ===");
 
   //! Timer setup
-  timer1_init_5Hz();
+  timer1_init_10Hz();
   //! Pin setup
   pinMode(triggerPin, OUTPUT);
   pinMode(radioIRQPin, INPUT);
