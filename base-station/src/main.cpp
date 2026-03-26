@@ -59,6 +59,8 @@ constexpr uint8_t RECV_CNT = sizeof(ECHO_PIN)/sizeof(ECHO_PIN[0]);
 #define echo_value() (PINC & 63)                        //! Macro to isolate certain pins in PORTC
 //! Serial Communication Parammters
 constexpr unsigned int BAUD_RATE  = 38400;
+//! PLL Synchronization Parameters
+constexpr unsigned long SYNC_PLL_INTERVAL = 100;  //! How often to send a
 
 //! Minimum delay between sending a trigger activations (milliseconds) — mutable via 'D' command
 uint16_t transmitDelay = 1;
@@ -109,11 +111,8 @@ void setup()
 
   //! Initialiaze LEDs
   leds.init(0);
-
-  //! Init Timer1: normal mode, prescaler 1024 (64 µs/tick at 16 MHz)
-  //TCCR1A = 0;
-  //TCCR1B = (1 << CS12) | (1 << CS10);
-  //TCNT1  = 0;
+  
+  //! Initialize the timers
   timer1_init();
   pinMode(triggerPin, OUTPUT);
 
@@ -142,7 +141,7 @@ static unsigned long this_ticks[6];
 static unsigned long this_not_used_ticks[6];
 unsigned int nwp;
 
-void measure_echo_times() {
+void measure_echo_times(bool noInterruptsFlag = false) {
     register byte this_value, previous_value;
     register unsigned long my_ticks;
     unsigned int i;
@@ -154,7 +153,9 @@ void measure_echo_times() {
     nwp=0;
     this_value=previous_value=0;
 
-    noInterrupts();
+    if (noInterruptsFlag) {
+        noInterrupts();
+    }
     //! This determines the "count" value for each sensor
     //constexpr long max_tick_val = 0x31000;
     //! The total time that it is looping here is way too large
@@ -190,7 +191,9 @@ void measure_echo_times() {
 
       }
     }
-    interrupts();
+    if (noInterruptsFlag){
+          interrupts();
+    }
     DEBUG_PRINTF("nwp: %u\n", nwp);
     DEBUG_PRINTF("highest tick: %lu\n", my_ticks);
 
@@ -258,10 +261,10 @@ void simulate_echo_times() {
 
 void onPulse(const CmdArg*) {
 
-    //! Pulse the trigger pin immediately to get the receivers into receiving mode
-    schedule_trigger(TCNT1, 0);
     bool success = radioCtrl.sendTrigger(TCNT1, TRIGGER_TICK_DELAY);
-    measure_echo_times(); //! Most of the slow down is here
+
+    //! Now that we are triggering at a set rate. 
+    measure_echo_times(false); //! Most of the slow down is here
 
     leds.setPulseTrig(success);
 
@@ -300,12 +303,24 @@ void onSetDelay(const CmdArg* args) {
     Serial.println(F(" ms"));
 }
 
+//! Periodically sends a trigger packet to synchronize the receiver's PLL
+void syncPLL(){
+    radioCtrl.sendTrigger(TCNT1, TRIGGER_TICK_DELAY);
+}
 // ---------------------------------------------------------------------------
 
 void loop()
 {
-    //cmdCtrl.poll();
-    onPulse(nullptr);
+
+    long currentTime = millis();
+    long lastSyncTime = 0;
+
+    cmdCtrl.poll();
+
+    if (currentTime - lastSyncTime >= SYNC_PLL_INTERVAL) {
+        syncPLL();
+        lastSyncTime = currentTime;
+    }
     delay(100);
   }
 

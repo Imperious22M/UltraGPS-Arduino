@@ -24,8 +24,8 @@ LedControl leds(3, 4, 6, 7, 8);      //! STAT_1, STAT_2, STAT_3, PULSE_TRIG, RAD
 // onRadioIRQ()
 //
 // Fires on the falling edge of the radio IRQ pin (RX_DR only).
-// Reads the packet directly via SPI (polled — safe in ISR), updates
-// TCNT1 to match the transmitter, then arms the one-shot trigger.
+// Reads the base station's current TCNT1 from the packet and applies
+// a PLL correction to keep the local timer in phase.
 // ---------------------------------------------------------------
 void onRadioIRQ() {
     bool tx_ok, tx_fail, rx_ready;
@@ -33,15 +33,10 @@ void onRadioIRQ() {
     radio.clearIRQFlags(tx_ok, tx_fail, rx_ready);
 
     if (!rx_ready) return;
-    if(!radio.receiveTrigger(timer_val, tick_delay)) return;
+    if (!radio.receiveTrigger(timer_val, tick_delay)) return;
 
-    // Interrupts are already disabled inside an ISR — TCNT1 write is safe
-    // Update the current count of the timer to match the transmitter's value, 
-    // then schedule the trigger
-    TCNT1        = timer_val;
-    timer_offset = 0;
-
-    schedule_trigger(timer_val, tick_delay);
+    // Correct the local timer phase to match the base station
+    pllCorrect((int16_t)(timer_val - TCNT1));
 }
 
 void setup()
