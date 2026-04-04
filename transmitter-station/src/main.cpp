@@ -48,7 +48,7 @@ void setup()
   DEBUG_PRINTLN("=== Receiver Starting ===");
 
   //! Timer setup
-  timer1_init_15Hz();
+  timer1_init_10Hz();
 
   //! Pin setup
   pinMode(triggerPin, OUTPUT);
@@ -75,6 +75,9 @@ void setup()
 
 void loop()
 {
+
+  //! Activation of trigger pin is found in ISR interrupt
+  //! in timers.cpp
   if (trigger_fired) {
       trigger_fired = false;
       DEBUG_INFO_PRINTLN("[INFO] Trigger fired.");
