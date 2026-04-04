@@ -5,6 +5,16 @@ constexpr uint8_t CMD_MAX_ARGS = 4;   //! Max arguments any single command can c
 constexpr uint8_t CMD_BUF_SIZE = 64;  //! Max length of one serial command line (incl. NUL)
 
 // ---------------------------------------------------------------------------
+// Polling state for tick serial loop timings
+// ---------------------------------------------------------------------------
+
+enum class PollingState : uint8_t { 
+    CONTINOUS, 
+    POLLING 
+};
+constexpr uint16_t continuousPollingDelay = 20; //! Millisecond delay between checking for pulses in continuous mode
+
+// ---------------------------------------------------------------------------
 // Argument types
 // ---------------------------------------------------------------------------
 
@@ -28,7 +38,7 @@ union CmdArg {
 enum class CommandType : uint8_t {
     PULSE,      //! 'P' — trigger an ultrasonic pulse
     SIMULATE,   //! 'S' — run in simulation mode
-    SET_DELAY,  //! 'D' — set transmit delay in milliseconds (1 int arg)
+    CONTINOUS,  //! 'C' — run in continuous mode 
     UNKNOWN,
 };
 
@@ -56,6 +66,9 @@ struct CommandEntry {
 
 class CommandControl {
 public:
+    //! Current polling state
+    PollingState pollingState = PollingState::POLLING;
+    
     //! Construct with a pointer to the command table and the number of entries
     CommandControl(const CommandEntry* table, uint8_t tableSize);
 

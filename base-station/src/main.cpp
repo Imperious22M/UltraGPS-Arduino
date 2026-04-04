@@ -65,11 +65,6 @@ constexpr unsigned long SYNC_PLL_INTERVAL = 100;  //! How often to send a
 //! Tick delay sent to receiver: how many Timer1 ticks after the packet arrives to fire the trigger.
 constexpr uint16_t TRIGGER_TICK_DELAY = 100;
 
-//! Makes the measure_echo_times tick count loop
-//! Exit as soon as all 0's are detected in the PINC
-//! register (When all receivers have received)
-//#define ECHO_EARLY_EXIT
-
 //! Instantiate all classes
 constexpr uint8_t radioIRQPin = 2;    //! Must be interrupt-capable (2 or 3 on Uno)
 RadioController radioCtrl(9, 10);     //! CE, CSN
@@ -79,10 +74,12 @@ LedControl leds(3, 4, 6, 7, 8);      //! STAT_1, STAT_2, STAT_3, PULSE_TRIG, RAD
 void onPulse(const CmdArg* args);
 void onSimulate(const CmdArg* args);
 void onSetDelay(const CmdArg* args);
+void onContinuous(const CmdArg* args);
 
 //! Command definitions
-static const CommandDef CMD_PULSE    = { CommandType::PULSE,     0, {},                  onPulse    };
-static const CommandDef CMD_SIMULATE = { CommandType::SIMULATE,  0, {},                  onSimulate };
+static const CommandDef CMD_PULSE    = { CommandType::PULSE,     0, {}, onPulse };
+static const CommandDef CMD_SIMULATE = { CommandType::SIMULATE,  0, {}, onSimulate };
+static const CommandDef CMD_CONTINOUS = { CommandType::CONTINOUS,  0, {}, onContinuous };
 //! Example of command with an argument
 //static const CommandDef CMD_SETDELAY = { CommandType::SET_DELAY, 1, { ArgType::INT },    onSetDelay };
 
@@ -90,6 +87,7 @@ static const CommandDef CMD_SIMULATE = { CommandType::SIMULATE,  0, {},         
 static const CommandEntry GLOBAL_CMD_TABLE[] = {
     { 'P', &CMD_PULSE    },  //! Trigger ultrasonic pulse
     { 'S', &CMD_SIMULATE },  //! Run simulation mode
+    { 'C', &CMD_CONTINOUS },  //! Run continuous mode
 };
 
 CommandControl cmdCtrl(GLOBAL_CMD_TABLE, sizeof(GLOBAL_CMD_TABLE) / sizeof(GLOBAL_CMD_TABLE[0]));
@@ -110,7 +108,7 @@ void setup()
   leds.init(0);
   
   //! Initialize the timers
-  timer1_init_15Hz();
+  timer1_init_10Hz();
   
   //! Pin Setup
   pinMode(triggerPin, OUTPUT);
@@ -140,6 +138,7 @@ static unsigned long this_ticks[6];
 static unsigned long this_not_used_ticks[6];
 unsigned int nwp;
 
+//! Measure the tick timings from ultrasonic transmitter
 void measure_echo_times(bool noInterruptsFlag = false) {
     register byte this_value, previous_value;
     register unsigned long my_ticks;
@@ -155,21 +154,12 @@ void measure_echo_times(bool noInterruptsFlag = false) {
         noInterrupts();
     }
     //! This determines the "count" value for each sensor
-    //constexpr long max_tick_val = 0x31000;
-    //! The total time that it is looping here is way too large
-    //! WARN
     constexpr long max_tick_val = 0x31000/4; //! About 60 ms of sampling time
-    constexpr byte ALL_ECHOES = 63;  //! All 6 echo pins (bits 0-5)
-    byte seen_all_high = 0;  //! Track if we've seen all echoes go HIGH
     
     //! Base sampling time around TCNT1 values
     uint16_t base_tick = TCNT1;
 
-    //Serial.println(F("[INFO] Starting echo time measurement loop..."));
-    //Serial.println(millis());
-
     for(my_ticks=0; my_ticks < max_tick_val; my_ticks++)
-    //while(TCNT1-base_tick < timer1_top/2)
     {
       this_value = echo_value();
       if (this_value != previous_value)
@@ -177,35 +167,20 @@ void measure_echo_times(bool noInterruptsFlag = false) {
         value[nwp] = previous_value = this_value;
         ticks[nwp++] = my_ticks;
 
-        #ifdef ECHO_EARLY_EXIT
-        //! Track when all echoes have gone HIGH
-        if (this_value == ALL_ECHOES) {
-          seen_all_high = 1;
-        }
-        #endif
-
         if (nwp >= sizeof(value)/sizeof(value[0])) {
           break;
         }
 
-        #ifdef ECHO_EARLY_EXIT
-        //! Exit early: all 6 echoes went HIGH then returned LOW
-        //! AKA all 6 echos have been received
-        if (seen_all_high && this_value == 0) {
-          break;
-        }
-        #endif
       }
+
       //! TODO: Move calculations constants out (LIKE TIMER1_TOP*0.8)
+      //! This loop breaks out of the sampling time early if 80% of TCNT1 clock cycles
+      //! have passed.
       if((int)(TCNT1 - base_tick)%timer1_top >= (uint16_t)(timer1_top*0.8) ) {
-        //Serial.println(F("[WARNING] Exiting echo time measurement loop early to avoid overflow."));
         break;
       }
 
     }
-
-    //Serial.println(millis()- millis_before);
-    //Serial.println(F("[INFO] End time measurement loop..."));
 
     if (noInterruptsFlag){
           interrupts();
@@ -251,11 +226,41 @@ void measure_echo_times(bool noInterruptsFlag = false) {
  }
 }
 
+//! Handler function for handling the ultrasonic sensor pulses and printing the tick values
+void handleUltrasonics() {
+    //! Experimentally the ultrasonic sensor needs about 3ms to "send" the ultrasonic
+    //! burst and go into receiver mode. We do not care about the ultrasonic
+    //! burst, so we just wait delay the activation of the trigger pin at the transmitter
+    //! to ensure that the receiver is in receive mode by the time the transmitter's 
+    //! burst is sent.
+    constexpr uint16_t SONIC_BURST_DELAY = 2*1000; //! 2ms delay
+    trigger_fired = false; //! Clear the trigger flag to prepare for the next pulse
+    bool success = radioCtrl.sendTrigger(TCNT1, SONIC_BURST_DELAY); 
+
+    //! Wait for next pulse
+    while(!trigger_fired){};
+    
+    //! Reset the trigger flag to signal that the most recent trigger has been sent and read
+    resetTriggerFlag();
+
+    //! Now that we are triggering at a set rate. 
+    measure_echo_times(false); //! Most of the slow down is here
+
+    leds.setPulseTrig(success);
+    Serial.print(this_ticks[0]);   Serial.print(", ");
+    Serial.print(this_ticks[1]);   Serial.print(", ");
+    Serial.print(this_ticks[2]);   Serial.print(", ");
+    Serial.print(this_ticks[3]);   Serial.print(", ");
+    Serial.print(this_ticks[4]);   Serial.print(", ");
+    Serial.println(this_ticks[5]);
+}
+
+//! Generate fake timings to test serial functionality
 void simulate_echo_times() {
   //! Simulate all 6 receivers with values centered around 3000
   //! Add small variations to make it more realistic
-  constexpr unsigned long BASE_COUNT = 3000;
-  constexpr int VARIATION = 200;  // ±200 counts variation
+  constexpr unsigned long BASE_COUNT = 401;
+  constexpr int VARIATION = 50;  // ±200 counts variation
 
   //! Generate simulated values with slight variations for each receiver
   //! Using a simple pattern to create realistic-looking variations
@@ -274,36 +279,17 @@ void simulate_echo_times() {
 // ---------------------------------------------------------------------------
 // Command callbacks
 // ---------------------------------------------------------------------------
-
+//! If not on continuous mode it just prints a single pulse
 void onPulse(const CmdArg*) {
+  if(cmdCtrl.pollingState != PollingState::POLLING) {
+    cmdCtrl.pollingState = PollingState::POLLING;
+  }
+    handleUltrasonics();
+}
 
-    //! Experimentally the ultrasonic sensor needs about 3ms to "send" the ultrasonic
-    //! burst and go into receiver mode. We do not care about the ultrasonic
-    //! burst, so we just wait delay the activation of the trigger pin at the transmitter
-    //! to ensure that the receiver is in receive mode by the time the transmitter's 
-    //! burst is sent.
-    constexpr uint16_t SONIC_BURST_DELAY = 2*1000; //! 2ms delay
-    trigger_fired = false; //! Clear the trigger flag to prepare for the next pulse
-    bool success = radioCtrl.sendTrigger(TCNT1, SONIC_BURST_DELAY); 
 
-    //! Wait for next pulse
-    while(!trigger_fired){};
-
-    
-    //! Reset the trigger flag to signal that the most recent trigger has been sent and read
-    resetTriggerFlag();
-
-    //! Now that we are triggering at a set rate. 
-    measure_echo_times(false); //! Most of the slow down is here
-
-    leds.setPulseTrig(success);
-    Serial.print(this_ticks[0]);   Serial.print(", ");
-    Serial.print(this_ticks[1]);   Serial.print(", ");
-    Serial.print(this_ticks[2]);   Serial.print(", ");
-    Serial.print(this_ticks[3]);   Serial.print(", ");
-    Serial.print(this_ticks[4]);   Serial.print(", ");
-    Serial.println(this_ticks[5]);
-
+void onContinuous(const CmdArg*) {
+    cmdCtrl.pollingState = PollingState::CONTINOUS;
 }
 
 void onSimulate(const CmdArg*) {
@@ -324,6 +310,7 @@ void onSimulate(const CmdArg*) {
 
 //! Periodically sends a trigger packet to synchronize the receiver's PLL
 void syncPLL(){
+    //! TODO
     //! Send a 0 to skip the processing/activation of a pin on the transmitter
     //! NOT YET IMPLEMENTED
     //! MAY NOT EVER BE IMPLEMENTED...
@@ -333,17 +320,25 @@ void syncPLL(){
 
 void loop()
 {
-
     long currentTime = millis();
     long lastSyncTime = 0;
+    long lastPulseTime = 0;
 
-    //cmdCtrl.poll();
+    cmdCtrl.poll();
 
-    if (currentTime - lastSyncTime >= (unsigned int)SYNC_PLL_INTERVAL) {
+    //! Peridic non-blocking functions
+    if (millis() - lastSyncTime >= (unsigned int)SYNC_PLL_INTERVAL) {
         syncPLL();
         lastSyncTime = currentTime;
     }
-    onPulse(nullptr);  //! For testing, just call the pulse command callback directly to send a trigger and print values
-    //delay(100);
+    if(cmdCtrl.pollingState == PollingState::CONTINOUS) {
+      if (millis() - lastPulseTime >= continuousPollingDelay) {
+          lastPulseTime = millis();
+          //handleUltrasonics();
+          //! temporary to simulate serial commands
+          onSimulate(nullptr);
+        }
+    }
+
   }
 
