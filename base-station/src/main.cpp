@@ -50,6 +50,9 @@ determine distance.
 #include "command_control.h"
 #include "timers.h"
 
+//! Definition to simulate "real" commands with pulse data
+//! Used during development to test the serial communication and command handling without needing to trigger the ultrasonic sensor
+//#define SIMULATE_REAL_COMMANDS 
 
 //! Base Station Parameters
 constexpr unsigned int TRIGGER_HIGH_DURATION = 300;     //! How long to hold the high state of the trigger pin (microseconds)
@@ -60,7 +63,7 @@ constexpr uint8_t RECV_CNT = sizeof(ECHO_PIN)/sizeof(ECHO_PIN[0]);
 //! Serial Communication Parammters
 constexpr unsigned int BAUD_RATE  = 38400;
 //! PLL Synchronization Parameters
-constexpr unsigned long SYNC_PLL_INTERVAL = 100;  //! How often to send a
+constexpr unsigned long SYNC_PLL_INTERVAL = 10;  //! How often to send a sync packet to the receiver to synchronize its PLL (milliseconds)
 
 //! Tick delay sent to receiver: how many Timer1 ticks after the packet arrives to fire the trigger.
 constexpr uint16_t TRIGGER_TICK_DELAY = 100;
@@ -75,11 +78,18 @@ void onPulse(const CmdArg* args);
 void onSimulate(const CmdArg* args);
 void onSetDelay(const CmdArg* args);
 void onContinuous(const CmdArg* args);
+void onSimulatePulse(const CmdArg*);
+void onSimulateContinous(const CmdArg* args);
 
 //! Command definitions
+#ifdef SIMULATE_REAL_COMMANDS
+static const CommandDef CMD_PULSE    = { CommandType::PULSE,     0, {}, onSimulatePulse };
+static const CommandDef CMD_CONTINOUS = { CommandType::CONTINOUS,  0, {}, onSimulateContinous };
+#else
 static const CommandDef CMD_PULSE    = { CommandType::PULSE,     0, {}, onPulse };
-static const CommandDef CMD_SIMULATE = { CommandType::SIMULATE,  0, {}, onSimulate };
 static const CommandDef CMD_CONTINOUS = { CommandType::CONTINOUS,  0, {}, onContinuous };
+#endif
+static const CommandDef CMD_SIMULATE = { CommandType::SIMULATE,  0, {}, onSimulatePulse};
 //! Example of command with an argument
 //static const CommandDef CMD_SETDELAY = { CommandType::SET_DELAY, 1, { ArgType::INT },    onSetDelay };
 
@@ -227,7 +237,8 @@ void measure_echo_times(bool noInterruptsFlag = false) {
 }
 
 //! Handler function for handling the ultrasonic sensor pulses and printing the tick values
-void handleUltrasonics() {
+//! If print is true, it will print the values to serial. If false, it will just measure the echo times and set the LEDs without printing.
+void handleUltrasonics(bool print = true) {
     //! Experimentally the ultrasonic sensor needs about 3ms to "send" the ultrasonic
     //! burst and go into receiver mode. We do not care about the ultrasonic
     //! burst, so we just wait delay the activation of the trigger pin at the transmitter
@@ -241,18 +252,32 @@ void handleUltrasonics() {
     while(!trigger_fired){};
     
     //! Reset the trigger flag to signal that the most recent trigger has been sent and read
-    resetTriggerFlag();
-
     //! Now that we are triggering at a set rate. 
-    measure_echo_times(false); //! Most of the slow down is here
-
+    resetTriggerFlag();
+    //! Measure the echo times without interrupts to avoid timing issues with the radio IRQ
+    measure_echo_times(false); 
     leds.setPulseTrig(success);
-    Serial.print(this_ticks[0]);   Serial.print(", ");
-    Serial.print(this_ticks[1]);   Serial.print(", ");
-    Serial.print(this_ticks[2]);   Serial.print(", ");
-    Serial.print(this_ticks[3]);   Serial.print(", ");
-    Serial.print(this_ticks[4]);   Serial.print(", ");
-    Serial.println(this_ticks[5]);
+
+    //! Print only if enabled
+    if(!print){
+      return;
+    }
+    String responseString;
+    //! Add a little marker to mark continuous mode and normal (non-continuous) data in the serial output
+    if(cmdCtrl.pollingState == PollingState::CONTINOUS) {
+      responseString = "C: ";
+    }else{
+      responseString = "N: ";
+    }
+    responseString +=
+    String(this_ticks[0]) + ", " +
+    String(this_ticks[1]) + ", " +
+    String(this_ticks[2]) + ", " +
+    String(this_ticks[3]) + ", " +
+    String(this_ticks[4]) + ", " +
+    String(this_ticks[5]);
+    Serial.println(responseString);
+    leds.setPulseTrig(false);
 }
 
 //! Generate fake timings to test serial functionality
@@ -275,7 +300,6 @@ void simulate_echo_times() {
   }
 }
 
-
 // ---------------------------------------------------------------------------
 // Command callbacks
 // ---------------------------------------------------------------------------
@@ -284,28 +308,59 @@ void onPulse(const CmdArg*) {
   if(cmdCtrl.pollingState != PollingState::POLLING) {
     cmdCtrl.pollingState = PollingState::POLLING;
   }
-    handleUltrasonics();
+    handleUltrasonics(true);
 }
-
 
 void onContinuous(const CmdArg*) {
     cmdCtrl.pollingState = PollingState::CONTINOUS;
+    handleUltrasonics(true);
 }
 
-void onSimulate(const CmdArg*) {
+void onSimulatePulse(const CmdArg*) {
     DEBUG_PRINTLN("Simulation mode activated");
 
-    leds.setPulseTrig(true);
+    if(cmdCtrl.pollingState != PollingState::POLLING) {
+      cmdCtrl.pollingState = PollingState::POLLING;
+    }
+
+    handleUltrasonics(false); //! Handle the ultrasonic logic without printing to serial
     simulate_echo_times();
+    
+    String responseString;
+    //! Add a little marker to mark continuous mode and normal (non-continuous) data in the serial output
+    responseString = "N: ";
+    responseString +=
+    String(this_ticks[0]) + ", " +
+    String(this_ticks[1]) + ", " +
+    String(this_ticks[2]) + ", " +
+    String(this_ticks[3]) + ", " +
+    String(this_ticks[4]) + ", " +
+    String(this_ticks[5]);
 
-    Serial.print(this_ticks[0]);   Serial.print(", ");
-    Serial.print(this_ticks[1]);   Serial.print(", ");
-    Serial.print(this_ticks[2]);   Serial.print(", ");
-    Serial.print(this_ticks[3]);   Serial.print(", ");
-    Serial.print(this_ticks[4]);   Serial.print(", ");
-    Serial.println(this_ticks[5]);
+    Serial.println(responseString);
+}
 
-    leds.setPulseTrig(false);
+void onSimulateContinous(const CmdArg*) {
+    DEBUG_PRINTLN("Simulation mode activated");
+    if(cmdCtrl.pollingState != PollingState::CONTINOUS) {
+      cmdCtrl.pollingState = PollingState::CONTINOUS;
+    }
+
+    handleUltrasonics(false); //! Handle the ultrasonic logic without printing to serial
+    simulate_echo_times();
+    
+    String responseString;
+    //! Add a little marker to mark continuous mode and normal (non-continuous) data in the serial output
+    responseString = "C: ";
+    responseString +=
+    String(this_ticks[0]) + ", " +
+    String(this_ticks[1]) + ", " +
+    String(this_ticks[2]) + ", " +
+    String(this_ticks[3]) + ", " +
+    String(this_ticks[4]) + ", " +
+    String(this_ticks[5]);
+
+    Serial.println(responseString);
 }
 
 //! Periodically sends a trigger packet to synchronize the receiver's PLL
@@ -334,9 +389,11 @@ void loop()
     if(cmdCtrl.pollingState == PollingState::CONTINOUS) {
       if (millis() - lastPulseTime >= continuousPollingDelay) {
           lastPulseTime = millis();
-          //handleUltrasonics();
-          //! temporary to simulate serial commands
-          onSimulate(nullptr);
+          #ifdef SIMULATE_REAL_COMMANDS
+          onSimulateContinous(nullptr);
+          #else
+          onContinuous(nullptr);
+          #endif
         }
     }
 
