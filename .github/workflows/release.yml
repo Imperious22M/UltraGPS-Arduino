@@ -1,0 +1,71 @@
+name: Release
+
+# Cut a versioned GitHub Release with the firmware images and the sketch
+# sources attached.
+#
+# Trigger: pushing a version tag (e.g. v1.0) — conventionally on the `release`
+# branch, which is the stable snapshot of a released version.
+#
+# Release procedure:
+#   1. Make sure `release` is at the exact commit you want to ship, and that the
+#      VERSION file matches the version you are tagging.
+#   2. Tag it and push the tag:
+#          git checkout release
+#          git tag v1.0
+#          git push origin v1.0
+#   3. This workflow builds both stations and publishes the artefacts under the
+#      Releases tab.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+# gh release create needs write access to create the release and upload assets.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          # Full history so `git archive` can package the sketch sources.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install PlatformIO Core
+        run: pip install platformio
+
+      - name: Verify the VERSION file matches the tag
+        run: |
+          tag="${GITHUB_REF_NAME#v}"                       # v1.0 -> 1.0
+          version="$(tr -d '[:space:]' < VERSION)"
+          echo "tag version: $tag   VERSION file: $version"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::Tag ($tag) does not match the VERSION file ($version). \
+          Update VERSION to match the tag before releasing." >&2
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Build both stations and collect the artefacts
+        run: bash build.sh dist
+
+      - name: Create the GitHub Release and upload the artefacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/ultragps-base-station-v${VERSION}.hex" \
+            "dist/ultragps-transmitter-station-v${VERSION}.hex" \
+            "dist/ultragps-arduino-sources-v${VERSION}.zip" \
+            --title "UltraGPS Arduino Firmware $GITHUB_REF_NAME" \
+            --generate-notes

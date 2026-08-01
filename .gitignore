@@ -1,0 +1,4 @@
+# Rendered documentation site (mkdocs build)
+site/
+# Collected release artefacts (build.sh dist)
+dist/
