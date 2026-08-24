@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><link rel="canonical" href="https://imperious22m.github.io/UltraGPS-Arduino/architecture/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Architecture - UltraGPS Arduino Firmware</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Architecture";
+        var mkdocs_page_input_path = "architecture.md";
+        var mkdocs_page_url = "/UltraGPS-Arduino/architecture/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> UltraGPS Arduino Firmware
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Architecture</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#projects">Projects</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#modules">Modules</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#third-party-library">Third-party library</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#data-flow">Data flow</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#how-one-measurement-happens">How one measurement happens</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#timing-model">Timing model</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#logging">Logging</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../hardware/">Hardware</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../installation/">Installation</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../uploading/">Uploading</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../configuration/">Configuration</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../usage/">Usage</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../developer-guide/">Developer's Guide</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">UltraGPS Arduino Firmware</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Architecture</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/Imperious22M/UltraGPS-Arduino/edit/master/docs/architecture.md">Edit on Imperious22M/UltraGPS-Arduino</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h1>
+<p>The repository contains <strong>two independent PlatformIO projects</strong>, one per
+Arduino. They share four source files by copy (<code>radio</code>, <code>led_control</code>,
+<code>timers</code>, <code>debug_macros</code>)</p>
+<h2 id="projects">Projects<a class="headerlink" href="#projects" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Project</th>
+<th>Runs on</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>base-station/</code></td>
+<td>Arduino Uno wired to the six receivers</td>
+<td>Serial command interface, radio master, echo timing, serial output</td>
+</tr>
+<tr>
+<td><code>transmitter-station/</code></td>
+<td>Arduino Uno wired to the ultrasonic transmitter</td>
+<td>Radio slave, PLL phase correction, fires the ultrasonic trigger</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">The transmitter station is the radio <em>receiver</em></p>
+</div>
+<h2 id="modules">Modules<a class="headerlink" href="#modules" title="Permanent link">&para;</a></h2>
+<p>Both sketches are organised the same way: a <code>setup()</code>/<code>loop()</code> control file plus
+a small set of single-purpose modules.</p>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Files</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Control</td>
+<td><code>main.cpp</code></td>
+<td>Pin/module setup, command callbacks, main loop</td>
+</tr>
+<tr>
+<td>Radio</td>
+<td><code>radio.{h,cpp}</code></td>
+<td>nRF24L01+ setup, <code>CommsPacket</code> framing, send/receive</td>
+</tr>
+<tr>
+<td>Timers</td>
+<td><code>timers.{h,cpp}</code></td>
+<td>Timer1 CTC setup, the <code>TIMER1_COMPA</code> ISR, PLL correction</td>
+</tr>
+<tr>
+<td>LEDs</td>
+<td><code>led_control.{h,cpp}</code></td>
+<td>Status LED state, startup animation</td>
+</tr>
+<tr>
+<td>Debug</td>
+<td><code>debug_macros.h</code></td>
+<td>Compile-time-gated <code>DEBUG_*</code> / <code>DEBUG_INFO_*</code> printing</td>
+</tr>
+<tr>
+<td>Commands</td>
+<td><code>command_control.{h,cpp}</code></td>
+<td>Serial line buffering and command dispatch (<strong>base station only</strong>)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="third-party-library">Third-party library<a class="headerlink" href="#third-party-library" title="Permanent link">&para;</a></h3>
+<p><a href="https://github.com/nRF24/RF24"><code>nRF24/RF24</code></a> is declared in each
+<code>platformio.ini</code> as <code>lib_deps</code> and is downloaded into <code>.pio/libdeps/</code> on the
+first build.</p>
+<h2 id="data-flow">Data flow<a class="headerlink" href="#data-flow" title="Permanent link">&para;</a></h2>
+<pre><code>   Ground station PC  (UltraGpsXY)
+          │  (USB serial, /dev/ttyACM0 @ 38400)
+          │  commands: P / S / C        data: &quot;N: t0, ..., t5&quot;
+          ▼
+   ┌──────────────────────────────────────────┐
+   │            BASE STATION                  │
+   │  CommandControl ──► handleUltrasonics()  │
+   │        │                    ▲            │
+   │  RadioController      measure_echo_times │
+   └────────┬─────────────────────────────────┘
+            │ nRF24 CommsPacket    ▲ echoes on A0–A5
+            │ (TCNT1, tick_delay)  │
+            ▼                      │
+   ┌────────────────────┐          │
+   │ TRANSMITTER STATION│          │
+   │  IRQ ► pllCorrect()│          │
+   │  Timer1 ISR ► pin 5│          │
+   └────────┬───────────┘          │
+            │ trigger pulse        │
+            ▼                      │
+     Ultrasonic transmitter ═══► 6 receivers ──┘
+                (sound)
+</code></pre>
+<h2 id="how-one-measurement-happens">How one measurement happens<a class="headerlink" href="#how-one-measurement-happens" title="Permanent link">&para;</a></h2>
+<ol>
+<li>The base station receives a command byte (<code>P</code>, <code>S</code>, or <code>C</code>) over serial.
+   <code>CommandControl::poll()</code> buffers the line and dispatches to the callback in
+   the global command table.</li>
+<li><code>handleUltrasonics()</code> clears <code>trigger_fired</code> and calls
+   <code>RadioController::sendTrigger(TCNT1, SONIC_BURST_DELAY)</code>. The packet carries
+   the base station's current Timer1 count and a µs delay.</li>
+<li>The transmitter station's radio raises its IRQ line. <code>onRadioIRQ()</code> reads the
+   packet and calls <code>pllCorrect(timer_val - TCNT1)</code>, nudging the local Timer1 so
+   the two boards stay in phase, and stores the tick delay.</li>
+<li>Both boards' Timer1 reach compare-match. Each <code>TIMER1_COMPA_vect</code> ISR pulses
+   its trigger pin (pin 5) for 50 µs and sets <code>trigger_fired</code>. On the
+   transmitter that pulse fires the ultrasonic burst, while on the receiver it triggers
+   the receive functionality of the receivers.</li>
+<li>The base station, released from its <code>while(!trigger_fired)</code> wait, runs
+   <code>measure_echo_times()</code>. It polls <code>PINC &amp; 63</code> in a tight loop for up to
+   some amount of (~60 at the time of writing) ms, recording every change of the six echo lines along with the loop iteration count at which it changed.</li>
+<li>The recorded transitions are reduced to one tick count per receiver, and the
+   six values are printed over serial as one comma-separated line.</li>
+</ol>
+<h2 id="timing-model">Timing model<a class="headerlink" href="#timing-model" title="Permanent link">&para;</a></h2>
+<p>Everything is driven by <strong>Timer1 in CTC mode with a prescaler of 256</strong>, so one
+timer tick is 16 µs. <code>timers.cpp</code> provides four rates:</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th><code>OCR1A</code></th>
+<th>Rate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>timer1_init_5Hz()</code></td>
+<td>12498</td>
+<td>5 Hz</td>
+</tr>
+<tr>
+<td><code>timer1_init_10Hz()</code></td>
+<td>6249</td>
+<td>10 Hz (default on both boards)</td>
+</tr>
+<tr>
+<td><code>timer1_init_15Hz()</code></td>
+<td>4166</td>
+<td>≈ 14.999 Hz</td>
+</tr>
+<tr>
+<td><code>timer1_init_20Hz()</code></td>
+<td>3124</td>
+<td>20 Hz</td>
+</tr>
+</tbody>
+</table>
+<p>The two boards free-run at the same nominal rate; the radio packet is what keeps
+them aligned. Because the packet carries the base station's raw <code>TCNT1</code>, the
+transmitter can compute its phase error directly and add it to its own <code>TCNT1</code> —
+a one-step software PLL, implemented as <code>pllCorrect()</code> in <code>timers.h</code>.</p>
+<div class="admonition note">
+<p class="admonition-title">Ticks are not the same as Timer1 counts:</p>
+<p>The values printed over serial are <strong>loop iterations</strong> of the sampling loop
+in <code>measure_echo_times()</code>, are not Timer1 ticks. They carry an <code>Ax + B</code> type
+relationship to distance: <code>A</code> converts counts to time/distance and <code>B</code>
+absorbs the fact that counting does not begin exactly at zero. Calibration
+is done downstream, not on the Arduino.</p>
+</div>
+<h2 id="logging">Logging<a class="headerlink" href="#logging" title="Permanent link">&para;</a></h2>
+<p>Serial printing is gated at compile time by two macros in <code>debug_macros.h</code>:</p>
+<ul>
+<li><strong><code>INFO_DEBUG</code></strong> — activates the <code>DEBUG_INFO_*</code> macros (status and error
+  messages: radio init, trigger fired, packet failures).</li>
+<li><strong><code>DEBUG</code></strong> — activates both <code>DEBUG_INFO_*</code> and the verbose <code>DEBUG_*</code> macros
+  (tick counts, <code>PINC</code> values, sampling diagnostics).</li>
+</ul>
+<p>Neither is defined by default, so both sets compile away to nothing. Plain
+<code>Serial.println()</code> calls — the measurement output and the base station's fatal
+radio error — are always present. See <a href="../configuration/">Configuration</a>.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href=".." class="btn btn-neutral float-left" title="Home"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../hardware/" class="btn btn-neutral float-right" title="Hardware">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/Imperious22M/UltraGPS-Arduino" class="fa fa-code-fork" style="color: #fcfcfc"> Imperious22M/UltraGPS-Arduino</a>
+        </span>
+    
+    
+      <span><a href=".." style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../hardware/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

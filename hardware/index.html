@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><link rel="canonical" href="https://imperious22m.github.io/UltraGPS-Arduino/hardware/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Hardware - UltraGPS Arduino Firmware</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Hardware";
+        var mkdocs_page_input_path = "hardware.md";
+        var mkdocs_page_url = "/UltraGPS-Arduino/hardware/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> UltraGPS Arduino Firmware
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../architecture/">Architecture</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Hardware</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#bill-of-materials">Bill of materials</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#pin-map-base-station">Pin map — base station</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#pin-map-transmitter-station">Pin map — transmitter station</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#radio-link">Radio link</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#status-leds">Status LEDs</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../installation/">Installation</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../uploading/">Uploading</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../configuration/">Configuration</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../usage/">Usage</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../developer-guide/">Developer's Guide</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">UltraGPS Arduino Firmware</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Hardware</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/Imperious22M/UltraGPS-Arduino/edit/master/docs/hardware.md">Edit on Imperious22M/UltraGPS-Arduino</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="hardware">Hardware<a class="headerlink" href="#hardware" title="Permanent link">&para;</a></h1>
+<p>Both stations are Arduino Unos (ATmega328P at 16 MHz) with an nRF24L01+ radio
+module and five status LEDs. The pin assignments are identical apart from the
+radio IRQ line, which only the transmitter station uses.</p>
+<h2 id="bill-of-materials">Bill of materials<a class="headerlink" href="#bill-of-materials" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Qty</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Arduino Uno</td>
+<td>2</td>
+<td>One per station</td>
+</tr>
+<tr>
+<td>nRF24L01+ radio module</td>
+<td>2</td>
+<td>2.4 GHz, SPI</td>
+</tr>
+<tr>
+<td>HC-SR04-style ultrasonic transmitter</td>
+<td>1</td>
+<td>Driven by the transmitter station</td>
+</tr>
+<tr>
+<td>Ultrasonic receivers</td>
+<td>6</td>
+<td>Echo lines feed the base station's <code>A0</code>–<code>A5</code></td>
+</tr>
+<tr>
+<td>Status LEDs (+ resistors, optional)</td>
+<td>10</td>
+<td>Five per station</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Power the radio properly</p>
+<p>The nRF24L01+ draws current in bursts that the Uno's 3.3 V regulator handles
+poorly. A 10 µF capacitor across the module's <code>VCC</code>/<code>GND</code> is the usual fix
+for <code>radio.begin()</code> succeeding but packets failing intermittently.</p>
+</div>
+<h2 id="pin-map-base-station">Pin map — base station<a class="headerlink" href="#pin-map-base-station" title="Permanent link">&para;</a></h2>
+<p>Defined in <code>base-station/src/main.cpp</code> and <code>base-station/src/timers.cpp</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Pin</th>
+<th>Direction</th>
+<th>Signal</th>
+<th>Set in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>2</code></td>
+<td>—</td>
+<td>Radio IRQ — <strong>declared but unused</strong></td>
+<td><code>main.cpp</code> (<code>radioIRQPin</code>)</td>
+</tr>
+<tr>
+<td><code>3</code></td>
+<td>OUT</td>
+<td><code>STAT_1</code> LED</td>
+<td><code>LedControl leds(3, 4, 6, 7, 8)</code></td>
+</tr>
+<tr>
+<td><code>4</code></td>
+<td>OUT</td>
+<td><code>STAT_2</code> LED</td>
+<td>"</td>
+</tr>
+<tr>
+<td><code>5</code></td>
+<td>OUT</td>
+<td>Trigger pulse (50 µs, fired by the Timer1 ISR)</td>
+<td><code>timers.cpp</code> (<code>triggerPin</code>)</td>
+</tr>
+<tr>
+<td><code>6</code></td>
+<td>OUT</td>
+<td><code>STAT_3</code> LED</td>
+<td><code>LedControl</code></td>
+</tr>
+<tr>
+<td><code>7</code></td>
+<td>OUT</td>
+<td><code>PULSE_TRIG</code> LED — lit while a pulse is in flight</td>
+<td>"</td>
+</tr>
+<tr>
+<td><code>8</code></td>
+<td>OUT</td>
+<td><code>RADIO_STATUS</code> LED — solid once the radio initialises</td>
+<td>"</td>
+</tr>
+<tr>
+<td><code>9</code></td>
+<td>OUT</td>
+<td>Radio <code>CE</code></td>
+<td><code>RadioController radioCtrl(9, 10)</code></td>
+</tr>
+<tr>
+<td><code>10</code></td>
+<td>OUT</td>
+<td>Radio <code>CSN</code></td>
+<td>"</td>
+</tr>
+<tr>
+<td><code>11</code></td>
+<td>OUT</td>
+<td>SPI <code>MOSI</code> → radio</td>
+<td>Hardware SPI</td>
+</tr>
+<tr>
+<td><code>12</code></td>
+<td>IN</td>
+<td>SPI <code>MISO</code> ← radio</td>
+<td>"</td>
+</tr>
+<tr>
+<td><code>13</code></td>
+<td>OUT</td>
+<td>SPI <code>SCK</code> → radio</td>
+<td>"</td>
+</tr>
+<tr>
+<td><code>A0</code>–<code>A5</code></td>
+<td>IN (pull-up)</td>
+<td>Echo lines from receivers 0–5</td>
+<td><code>ECHO_PIN[]</code></td>
+</tr>
+</tbody>
+</table>
+<p>The six echo lines <strong>must</strong> stay on <code>A0</code>–<code>A5</code>: <code>measure_echo_times()</code> reads them
+as a group with <code>PINC &amp; 63</code>, which is a direct read of <code>PORTC</code>'s low six bits.
+Moving a receiver to a digital pin would silently drop it from the measurement.</p>
+<h2 id="pin-map-transmitter-station">Pin map — transmitter station<a class="headerlink" href="#pin-map-transmitter-station" title="Permanent link">&para;</a></h2>
+<p>Defined in <code>transmitter-station/src/main.cpp</code> and
+<code>transmitter-station/src/timers.cpp</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Pin</th>
+<th>Direction</th>
+<th>Signal</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>2</code></td>
+<td>IN</td>
+<td>Radio <code>IRQ</code> — <code>attachInterrupt(..., FALLING)</code> drives <code>onRadioIRQ()</code></td>
+</tr>
+<tr>
+<td><code>3</code></td>
+<td>OUT</td>
+<td><code>STAT_1</code> LED</td>
+</tr>
+<tr>
+<td><code>4</code></td>
+<td>OUT</td>
+<td><code>STAT_2</code> LED</td>
+</tr>
+<tr>
+<td><code>5</code></td>
+<td>OUT</td>
+<td>Trigger to the ultrasonic transmitter (50 µs pulse)</td>
+</tr>
+<tr>
+<td><code>6</code></td>
+<td>OUT</td>
+<td><code>STAT_3</code> LED</td>
+</tr>
+<tr>
+<td><code>7</code></td>
+<td>OUT</td>
+<td><code>PULSE_TRIG</code> LED</td>
+</tr>
+<tr>
+<td><code>8</code></td>
+<td>OUT</td>
+<td><code>RADIO_STATUS</code> LED</td>
+</tr>
+<tr>
+<td><code>9</code></td>
+<td>OUT</td>
+<td>Radio <code>CE</code></td>
+</tr>
+<tr>
+<td><code>10</code></td>
+<td>OUT</td>
+<td>Radio <code>CSN</code></td>
+</tr>
+<tr>
+<td><code>11</code>–<code>13</code></td>
+<td>IN/OUT</td>
+<td>Hardware SPI to the radio</td>
+</tr>
+</tbody>
+</table>
+<p>Pin 2 must be interrupt-capable.</p>
+<h2 id="radio-link">Radio link<a class="headerlink" href="#radio-link" title="Permanent link">&para;</a></h2>
+<p>Both stations configure the nRF24L01+ identically in <code>RadioController::init()</code>,
+except for which pipe they write to:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Channel</td>
+<td><code>100</code></td>
+</tr>
+<tr>
+<td>Data rate</td>
+<td><code>RF24_1MBPS</code></td>
+</tr>
+<tr>
+<td>PA level</td>
+<td><code>RF24_PA_HIGH</code></td>
+</tr>
+<tr>
+<td>Payload</td>
+<td>8 bytes, fixed (dynamic payloads disabled)</td>
+</tr>
+<tr>
+<td>Auto-ack</td>
+<td>Off</td>
+</tr>
+<tr>
+<td>Retries</td>
+<td><code>setRetries(0, 0)</code> — none</td>
+</tr>
+<tr>
+<td>Base station writes to</td>
+<td><code>PIPE_TX_TO_RX</code> (<code>0xF0F0F0F0E1</code>)</td>
+</tr>
+<tr>
+<td>Transmitter listens on</td>
+<td><code>PIPE_TX_TO_RX</code>, writes to <code>PIPE_RX_TO_TX</code> (<code>0xF0F0F0F0E2</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>Auto-ack and retries are deliberately off: a late trigger packet is worse than a
+lost one, so the link is fire-and-forget.</p>
+<p>The 8-byte payload is <code>CommsPacket</code> (<code>radio.h</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>type</code></td>
+<td><code>PacketType</code></td>
+<td><code>PKT_NO_DATA</code> (1) or <code>PKT_TRIGGER</code> (2)</td>
+</tr>
+<tr>
+<td><code>_pad[3]</code></td>
+<td><code>uint8_t</code></td>
+<td>Alignment padding to keep the struct at 8 bytes</td>
+</tr>
+<tr>
+<td><code>timestamp</code></td>
+<td><code>uint16_t</code></td>
+<td>The base station's <code>TCNT1</code> at send time</td>
+</tr>
+<tr>
+<td><code>tick_delay</code></td>
+<td><code>uint16_t</code></td>
+<td>Microseconds the transmitter waits before firing</td>
+</tr>
+</tbody>
+</table>
+<h2 id="status-leds">Status LEDs<a class="headerlink" href="#status-leds" title="Permanent link">&para;</a></h2>
+<p><code>LedControl</code> drives all five LEDs on each board and holds a shadow copy of their
+state, so <code>getStat1()</code> and friends never need a <code>digitalRead</code> on an output pin.</p>
+<table>
+<thead>
+<tr>
+<th>LED</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>RADIO_STATUS</code> (pin 8)</td>
+<td>Solid once the radio initialises. <strong>Blinking on a two-second cycle means radio init failed</strong> and the sketch has halted.</td>
+</tr>
+<tr>
+<td><code>PULSE_TRIG</code> (pin 7)</td>
+<td>Lit while a trigger is in active</td>
+</tr>
+<tr>
+<td><code>STAT_1</code>–<code>STAT_3</code> (pins 3, 4, 6)</td>
+<td>Reserved — wired and controllable, but nothing currently drives them</td>
+</tr>
+</tbody>
+</table>
+<p>Both sketches call <code>leds.init(0)</code>, which sets the pins to output and drives them
+low <strong>without</strong> the startup animation. Pass <code>leds.init(1)</code> (or omit the
+argument) to run <code>startupAnimation()</code> — a chase pattern across all five LEDs,
+useful as a quick "the board rebooted" indicator.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../architecture/" class="btn btn-neutral float-left" title="Architecture"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../installation/" class="btn btn-neutral float-right" title="Installation">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/Imperious22M/UltraGPS-Arduino" class="fa fa-code-fork" style="color: #fcfcfc"> Imperious22M/UltraGPS-Arduino</a>
+        </span>
+    
+    
+      <span><a href="../architecture/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../installation/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

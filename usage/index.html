@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><link rel="canonical" href="https://imperious22m.github.io/UltraGPS-Arduino/usage/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Usage - UltraGPS Arduino Firmware</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Usage";
+        var mkdocs_page_input_path = "usage.md";
+        var mkdocs_page_url = "/UltraGPS-Arduino/usage/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> UltraGPS Arduino Firmware
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../architecture/">Architecture</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../hardware/">Hardware</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../installation/">Installation</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../uploading/">Uploading</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../configuration/">Configuration</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Usage</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#connecting">Connecting</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#commands">Commands</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#leaving-continuous-mode">Leaving continuous mode</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#invalid-input">Invalid input</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#output-format">Output format</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#what-the-numbers-mean">What the numbers mean</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#example-session">Example session</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#rates">Rates</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#startup-behaviour">Startup behaviour</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../developer-guide/">Developer's Guide</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">UltraGPS Arduino Firmware</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Usage</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/Imperious22M/UltraGPS-Arduino/edit/master/docs/usage.md">Edit on Imperious22M/UltraGPS-Arduino</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="usage">Usage<a class="headerlink" href="#usage" title="Permanent link">&para;</a></h1>
+<p>Only the <strong>base station</strong> has a user interface. It listens on USB serial at
+38400 bps and responds to single-letter commands. The transmitter station has no
+command interface — once flashed it runs autonomously, reacting to radio packets
+and its own timer.</p>
+<h2 id="connecting">Connecting<a class="headerlink" href="#connecting" title="Permanent link">&para;</a></h2>
+<p>Any 38400 bps serial terminal works:</p>
+<pre><code class="language-bash">pio device monitor -p /dev/ttyACM0 -b 38400
+</code></pre>
+<pre><code class="language-bash">screen /dev/ttyACM0 38400        # exit with Ctrl-A then k
+</code></pre>
+<p>Opening the port asserts DTR, which resets the Uno. <code>setup()</code> waits up to 3
+seconds for the host to attach, so give it a moment before sending the first
+command.</p>
+<p>In normal operation the port is held by the
+<a href="https://github.com/Imperious22M/UltraGPS-Ground">ground-station program</a>
+(<code>UltraGpsXY</code>), which issues these same commands on behalf of network clients.
+Only one program can hold the port at a time.</p>
+<h2 id="commands">Commands<a class="headerlink" href="#commands" title="Permanent link">&para;</a></h2>
+<p>Send one letter followed by a newline or carriage return. Anything else is
+silently discarded.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Effect</th>
+<th>Response</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>P</code></td>
+<td>Fire one pulse and measure the echoes. Leaves (or returns to) polling mode.</td>
+<td>One <code>N:</code> line</td>
+</tr>
+<tr>
+<td><code>C</code></td>
+<td>Enter continuous mode — measure and report repeatedly until interrupted</td>
+<td>A stream of <code>C:</code> lines</td>
+</tr>
+<tr>
+<td><code>S</code></td>
+<td>Fire one pulse but report <strong>simulated</strong> counts. Returns to polling mode.</td>
+<td>One <code>N:</code> line</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Line endings matter</p>
+<p><code>CommandControl::poll()</code> only dispatches a command when it sees <code>\n</code> or
+<code>\r</code>. In the Arduino IDE's Serial Monitor, set the line-ending dropdown to
+<em>Newline</em> or <em>Carriage return</em> — with <em>No line ending</em> nothing will ever
+happen.</p>
+</div>
+<h3 id="leaving-continuous-mode">Leaving continuous mode<a class="headerlink" href="#leaving-continuous-mode" title="Permanent link">&para;</a></h3>
+<p>There is no stop command. Send <code>P</code> or <code>S</code> — both set the polling state back to
+<code>POLLING</code>, which ends the stream. Resetting the board works too.</p>
+<h3 id="invalid-input">Invalid input<a class="headerlink" href="#invalid-input" title="Permanent link">&para;</a></h3>
+<p>Unknown letters, empty lines, and lines longer than 63 characters are dropped
+without any response. The base station never echoes input and never reports an
+error for a bad command, so silence after a command means it was not recognised.</p>
+<h2 id="output-format">Output format<a class="headerlink" href="#output-format" title="Permanent link">&para;</a></h2>
+<p>Every measurement is one line: a two-character mode marker, then six
+comma-separated ticks, one per receiver, in <code>A0</code>–<code>A5</code> order.</p>
+<pre><code>N: 4404, 3226, 4063, 4041, 3133, 4109
+C: 4398, 3231, 4059, 4044, 3130, 4112
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Marker</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>N:</code></td>
+<td>Normal — a single measurement, from <code>P</code> or <code>S</code></td>
+</tr>
+<tr>
+<td><code>C:</code></td>
+<td>Continuous — part of the stream started by <code>C</code></td>
+</tr>
+</tbody>
+</table>
+<p>The marker exists so a consuming program can tell solicited replies from
+streamed data on the same port.</p>
+<h3 id="what-the-numbers-mean">What the numbers mean<a class="headerlink" href="#what-the-numbers-mean" title="Permanent link">&para;</a></h3>
+<p>Each value is the number of sampling-loop iterations between the trigger and
+that receiver's echo going low — a <strong>tick</strong>, not microseconds and not
+millimetres. Converting to distance takes the form <code>Ax + B</code>, where <code>A</code> scales
+counts to time or distance and <code>B</code> absorbs the fact that counting does not start
+at exactly zero. Both constants are determined by calibration downstream; the
+firmware does no conversion.</p>
+<p>A value of <code>0</code> means that receiver never produced a usable echo transition
+within the sampling window — out of range, not wired, or the pulse never fired.</p>
+<h2 id="example-session">Example session<a class="headerlink" href="#example-session" title="Permanent link">&para;</a></h2>
+<pre><code>$ pio device monitor -p /dev/ttyACM0 -b 38400
+P
+N: 4404, 3226, 4063, 4041, 3133, 4109
+P
+N: 4401, 3229, 4066, 4038, 3135, 4106
+C
+C: 4400, 3227, 4064, 4040, 3134, 4108
+C: 4399, 3230, 4062, 4043, 3131, 4110
+C: 4402, 3228, 4065, 4039, 3136, 4107
+P
+N: 4403, 3227, 4063, 4041, 3133, 4109
+</code></pre>
+<h2 id="rates">Rates<a class="headerlink" href="#rates" title="Permanent link">&para;</a></h2>
+<p>In continuous mode <code>loop()</code> checks <code>continuousPollingDelay</code> (20 ms) before
+starting the next measurement, but each measurement blocks in
+<code>handleUltrasonics()</code> waiting for the next Timer1 compare match. The trigger
+rate is therefore the real limit: at the default 10 Hz you get about ten lines
+per second regardless of the 20 ms constant. Raising the output rate means
+changing the timer rate on <strong>both</strong> boards — see
+<a href="../configuration/">Configuration</a>.</p>
+<h2 id="startup-behaviour">Startup behaviour<a class="headerlink" href="#startup-behaviour" title="Permanent link">&para;</a></h2>
+<p>On reset the base station:</p>
+<ol>
+<li>Opens the serial port at 38400 and waits up to 3 s for the host.</li>
+<li>Sets <code>A0</code>–<code>A5</code> to <code>INPUT_PULLUP</code>.</li>
+<li>Initialises the LEDs (animation off by default).</li>
+<li>Starts Timer1 at 10 Hz.</li>
+<li>Initialises the radio. <strong>If this fails the sketch halts</strong>, blinking
+   <code>RADIO_STATUS</code> on a two-second cycle (1 s on, 1 s off) and printing
+   <code>[ERROR] Still halted.</code> on each cycle. Nothing recovers this except fixing
+   the wiring and resetting the board.</li>
+<li>Leaves <code>RADIO_STATUS</code> solid and waits for commands.</li>
+</ol>
+<p>There is no banner or ready message on a successful start — the first output you
+see is the response to your first command.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../configuration/" class="btn btn-neutral float-left" title="Configuration"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../developer-guide/" class="btn btn-neutral float-right" title="Developer's Guide">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/Imperious22M/UltraGPS-Arduino" class="fa fa-code-fork" style="color: #fcfcfc"> Imperious22M/UltraGPS-Arduino</a>
+        </span>
+    
+    
+      <span><a href="../configuration/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../developer-guide/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><link rel="canonical" href="https://imperious22m.github.io/UltraGPS-Arduino/configuration/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Configuration - UltraGPS Arduino Firmware</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Configuration";
+        var mkdocs_page_input_path = "configuration.md";
+        var mkdocs_page_url = "/UltraGPS-Arduino/configuration/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> UltraGPS Arduino Firmware
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../architecture/">Architecture</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../hardware/">Hardware</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../installation/">Installation</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../uploading/">Uploading</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Configuration</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#where-each-setting-lives">Where each setting lives</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#platformio-project-settings">PlatformIO project settings</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#serial">Serial</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#pulse-rate">Pulse rate</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#trigger-timing">Trigger timing</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#sampling-window">Sampling window</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#radio">Radio</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#leds">LEDs</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#debug-output">Debug output</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#simulation-mode">Simulation mode</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../usage/">Usage</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../developer-guide/">Developer's Guide</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">UltraGPS Arduino Firmware</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Configuration</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/Imperious22M/UltraGPS-Arduino/edit/master/docs/configuration.md">Edit on Imperious22M/UltraGPS-Arduino</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h1>
+<p>All configuration are <strong>compile-time</strong>, which means that any change in these settings will need to be re-uploaded to the board.</p>
+<h2 id="where-each-setting-lives">Where each setting lives<a class="headerlink" href="#where-each-setting-lives" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Controls</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;project&gt;/platformio.ini</code></td>
+<td>Board, serial ports, monitor baud, libraries</td>
+</tr>
+<tr>
+<td><code>&lt;project&gt;/src/main.cpp</code></td>
+<td>Baud rate, pin assignments, command table, sampling window, simulation</td>
+</tr>
+<tr>
+<td><code>&lt;project&gt;/src/timers.cpp</code></td>
+<td>Pulse rate, trigger pin, trigger pulse width</td>
+</tr>
+<tr>
+<td><code>&lt;project&gt;/src/command_control.h</code></td>
+<td>Continuous-mode rate, command buffer limits (base station only)</td>
+</tr>
+<tr>
+<td><code>&lt;project&gt;/src/radio.{h,cpp}</code></td>
+<td>Radio channel, data rate, power, pipe addresses</td>
+</tr>
+<tr>
+<td><code>&lt;project&gt;/src/debug_macros.h</code></td>
+<td>Debug output level</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Some settings must be changed on both boards</p>
+<p>The baud rate, pulse rate, and radio parameters exist independently in each
+project. Change one and the boards stop agreeing. Each entry below says
+whether it needs to be kept in sync.</p>
+</div>
+<h2 id="platformio-project-settings">PlatformIO project settings<a class="headerlink" href="#platformio-project-settings" title="Permanent link">&para;</a></h2>
+<p><code>base-station/platformio.ini</code>:</p>
+<pre><code class="language-ini">[env:uno]
+platform = atmelavr
+board = uno
+framework = arduino
+lib_deps = nRF24/RF24
+monitor_speed = 38400
+
+monitor_port = /dev/ttyACM0
+upload_port = /dev/ttyACM0
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default (base / transmitter)</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>board</code></td>
+<td><code>uno</code></td>
+<td>Change for a different AVR board. The <code>PINC</code> reads and Timer1 values assume an ATmega328P at 16 MHz.</td>
+</tr>
+<tr>
+<td><code>lib_deps</code></td>
+<td><code>nRF24/RF24</code></td>
+<td>Downloaded on first build</td>
+</tr>
+<tr>
+<td><code>monitor_speed</code></td>
+<td><code>38400</code></td>
+<td>Must match <code>BAUD_RATE</code> in <code>main.cpp</code></td>
+</tr>
+<tr>
+<td><code>monitor_port</code></td>
+<td><code>/dev/ttyACM0</code> / <code>/dev/ttyACM1</code></td>
+<td>Port the serial monitor opens</td>
+</tr>
+<tr>
+<td><code>upload_port</code></td>
+<td><code>/dev/ttyACM0</code> / <code>/dev/ttyACM1</code></td>
+<td>Port <code>--target upload</code> flashes</td>
+</tr>
+</tbody>
+</table>
+<p>Override the upload port for a single run instead of editing the file:</p>
+<pre><code class="language-bash">pio run -d base-station --target upload --upload-port /dev/ttyACM2
+</code></pre>
+<h2 id="serial">Serial<a class="headerlink" href="#serial" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>File</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BAUD_RATE</code></td>
+<td><code>main.cpp</code> (both)</td>
+<td><code>38400</code></td>
+<td><strong>Keep in sync</strong> across both sketches, both <code>platformio.ini</code> files, and the ground-station program's <code>--baud-rate</code></td>
+</tr>
+<tr>
+<td><code>CMD_BUF_SIZE</code></td>
+<td><code>command_control.h</code></td>
+<td><code>64</code></td>
+<td>Longest accepted command line, including the NUL. Longer lines are discarded, not truncated.</td>
+</tr>
+<tr>
+<td><code>CMD_MAX_ARGS</code></td>
+<td><code>command_control.h</code></td>
+<td><code>4</code></td>
+<td>Maximum arguments any one command can carry</td>
+</tr>
+</tbody>
+</table>
+<h2 id="pulse-rate">Pulse rate<a class="headerlink" href="#pulse-rate" title="Permanent link">&para;</a></h2>
+<p>Both boards call a <code>timer1_init_*()</code> function from <code>setup()</code>. <code>timers.cpp</code>
+provides four; the default on both is 10 Hz:</p>
+<pre><code class="language-cpp">timer1_init_10Hz();   // in setup(), base-station and transmitter-station
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Rate</th>
+<th><code>OCR1A value</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>timer1_init_5Hz()</code></td>
+<td>5 Hz</td>
+<td>12498</td>
+</tr>
+<tr>
+<td><code>timer1_init_10Hz()</code></td>
+<td>10 Hz</td>
+<td>6249</td>
+</tr>
+<tr>
+<td><code>timer1_init_15Hz()</code></td>
+<td>≈ 14.999 Hz</td>
+<td>4166</td>
+</tr>
+<tr>
+<td><code>timer1_init_20Hz()</code></td>
+<td>20 Hz</td>
+<td>3124</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Change this on both boards.</strong> The PLL corrects phase, not frequency — if the
+boards run at different rates the transmitter is yanked back into phase every
+packet and the timing is unusable.</p>
+<p>All four use CTC mode with a prescaler of 256, so one tick is 16 µs. To add a
+rate, copy one of the functions and set <code>OCR1A = 16000000 / 256 / f - 1</code>, then
+assign the same value to <code>timer1_top</code>.</p>
+<div class="admonition note">
+<p class="admonition-title">Faster is not always better</p>
+<p>The sampling window in <code>measure_echo_times()</code> is capped at 80 % of
+<code>timer1_top</code>, so raising the rate shortens the window and reduces the
+maximum measurable range. At 20 Hz the window is roughly half of what it is
+at 10 Hz.</p>
+</div>
+<h2 id="trigger-timing">Trigger timing<a class="headerlink" href="#trigger-timing" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>File</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>triggerPin</code></td>
+<td><code>timers.cpp</code> (both)</td>
+<td><code>5</code></td>
+<td>Pin pulsed by the Timer1 ISR</td>
+</tr>
+<tr>
+<td><code>TRIGGER_PULSE_US</code></td>
+<td><code>timers.cpp</code> (both)</td>
+<td><code>50</code></td>
+<td>Trigger pulse width. The HC-SR04 datasheet requires 10 µs; 50 µs is a safety margin.</td>
+</tr>
+<tr>
+<td><code>SONIC_BURST_DELAY</code></td>
+<td><code>main.cpp</code> (base, inside <code>handleUltrasonics()</code>)</td>
+<td><code>2*1000</code></td>
+<td>Microseconds the transmitter waits after the packet before firing, giving the receivers time to settle into receive mode</td>
+</tr>
+<tr>
+<td><code>SYNC_PLL_INTERVAL</code></td>
+<td><code>main.cpp</code> (base)</td>
+<td><code>10</code></td>
+<td>Milliseconds between PLL sync packets</td>
+</tr>
+<tr>
+<td><code>tick_delay</code></td>
+<td><code>timers.cpp</code> (transmitter)</td>
+<td>set by radio</td>
+<td>Applied as <code>delayMicroseconds()</code> at the top of the ISR. Hard-capped at 16383 µs by <code>delayMicroseconds()</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="sampling-window">Sampling window<a class="headerlink" href="#sampling-window" title="Permanent link">&para;</a></h2>
+<p>Inside <code>measure_echo_times()</code>:</p>
+<pre><code class="language-cpp">constexpr long max_tick_val = 0x31000/4;   //! About 60 ms of sampling time
+</code></pre>
+<p>50 176 iterations of the polling loop, whichever comes first with the 80 %
+timer cut-off. Raising it extends the maximum measurable distance; it cannot
+usefully exceed the pulse period.</p>
+<p>The transition buffers are fixed at 100 entries:</p>
+<pre><code class="language-cpp">static byte value[100];
+static unsigned long ticks[100];
+</code></pre>
+<p>Sampling stops early if all 100 fill up. With six receivers and one rising plus
+one falling edge each, 100 is generous — but a noisy echo line can burn through
+it and truncate the measurement.</p>
+<h2 id="radio">Radio<a class="headerlink" href="#radio" title="Permanent link">&para;</a></h2>
+<p>Set in <code>RadioController::init()</code> in <code>radio.cpp</code>, and identical on both boards
+apart from the pipe direction. <strong>Every one of these must match on both boards.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>setChannel(100)</code></td>
+<td><code>100</code></td>
+<td>0–125. Change on both boards to dodge Wi-Fi interference.</td>
+</tr>
+<tr>
+<td><code>setDataRate(RF24_1MBPS)</code></td>
+<td>1 Mbps</td>
+<td><code>RF24_250KBPS</code> gives more range at the cost of latency</td>
+</tr>
+<tr>
+<td><code>setPALevel(RF24_PA_HIGH)</code></td>
+<td>HIGH</td>
+<td>Drop to <code>RF24_PA_LOW</code> if the modules are close and the supply is marginal</td>
+</tr>
+<tr>
+<td><code>setPayloadSize(8)</code></td>
+<td>8</td>
+<td>Must equal <code>sizeof(CommsPacket)</code></td>
+</tr>
+<tr>
+<td><code>setAutoAck(false)</code></td>
+<td>off</td>
+<td>Deliberate — a retried trigger would arrive too late to be useful</td>
+</tr>
+<tr>
+<td><code>setRetries(0, 0)</code></td>
+<td>none</td>
+<td>Same reason</td>
+</tr>
+<tr>
+<td><code>PIPE_TX_TO_RX</code></td>
+<td><code>0xF0F0F0F0E1</code></td>
+<td>Base → transmitter. Change on both boards if two UltraGPS systems share a room.</td>
+</tr>
+<tr>
+<td><code>PIPE_RX_TO_TX</code></td>
+<td><code>0xF0F0F0F0E2</code></td>
+<td>Opened both ways but currently unused</td>
+</tr>
+</tbody>
+</table>
+<p>Radio pins are set where the controller is constructed in <code>main.cpp</code>:</p>
+<pre><code class="language-cpp">RadioController radioCtrl(9, 10);   //! CE, CSN
+constexpr uint8_t radioIRQPin = 2;  //! transmitter only; must be pin 2 or 3
+</code></pre>
+<h2 id="leds">LEDs<a class="headerlink" href="#leds" title="Permanent link">&para;</a></h2>
+<pre><code class="language-cpp">LedControl leds(3, 4, 6, 7, 8);   //! STAT_1, STAT_2, STAT_3, PULSE_TRIG, RADIO_STATUS
+</code></pre>
+<p>Both sketches call <code>leds.init(0)</code> in <code>setup()</code>, which skips the startup
+animation. Change it to <code>leds.init(1)</code> to run the ~2.5 s LED chase on every
+reset.</p>
+<h2 id="debug-output">Debug output<a class="headerlink" href="#debug-output" title="Permanent link">&para;</a></h2>
+<p><code>debug_macros.h</code> (a separate copy per project) gates all diagnostic printing:</p>
+<pre><code class="language-cpp">//! Enable debug mode
+//#define DEBUG
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Macro</th>
+<th>Uncomment to get</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><em>(neither)</em></td>
+<td>Default. Only measurement output and fatal radio errors are printed.</td>
+</tr>
+<tr>
+<td><code>INFO_DEBUG</code></td>
+<td><code>DEBUG_INFO_*</code> messages: radio init, packet send failures, trigger-fired notices</td>
+</tr>
+<tr>
+<td><code>DEBUG</code></td>
+<td>Both sets — adds <code>DEBUG_*</code> verbose diagnostics (<code>nwp</code>, highest tick, max <code>PINC</code> value)</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Debug output corrupts the data stream</p>
+<p>Diagnostics go to the same serial port as the measurements, so a program
+parsing the output — such as the ground-station <code>UltraGpsXY</code> — will see
+interleaved lines it cannot decode. Enable these only when driving the board
+from a human-readable serial monitor.</p>
+</div>
+<h2 id="simulation-mode">Simulation mode<a class="headerlink" href="#simulation-mode" title="Permanent link">&para;</a></h2>
+<p>The base station can produce plausible fake tick counts without any working
+ultrasonic hardware, which is the fastest way to test the serial link and any
+program consuming it.</p>
+<p>There are two ways in:</p>
+<p><strong>The <code>S</code> command</strong> — always available. Runs the real radio and trigger path but
+prints simulated values instead of measured ones.</p>
+<p><strong>The <code>SIMULATE_REAL_COMMANDS</code> macro</strong> — at the top of <code>base-station/src/main.cpp</code>:</p>
+<pre><code class="language-cpp">//! Definition to simulate &quot;real&quot; commands with pulse data
+//#define SIMULATE_REAL_COMMANDS
+</code></pre>
+<p>Uncomment it to make <code>P</code> and <code>C</code> behave like <code>S</code> too, so <em>every</em> command
+returns simulated data. Use this when the consuming program only issues <code>P</code> and
+<code>C</code> and you do not want to modify it.</p>
+<p>Simulated values come from <code>simulate_echo_times()</code>: a base of <code>401</code> counts with
+a ±50 deterministic variation per receiver that shifts on each call.</p>
+<pre><code class="language-cpp">constexpr unsigned long BASE_COUNT = 401;
+constexpr int VARIATION = 50;
+</code></pre>
+<div class="admonition note">
+<p class="admonition-title">Simulation still needs the radio</p>
+<p><code>onSimulatePulse()</code> calls <code>handleUltrasonics(false)</code> before faking the
+numbers, so the radio must still initialise or the sketch halts in <code>setup()</code>.
+It does not need the ultrasonic hardware or the receivers.</p>
+</div>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../uploading/" class="btn btn-neutral float-left" title="Uploading"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../usage/" class="btn btn-neutral float-right" title="Usage">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/Imperious22M/UltraGPS-Arduino" class="fa fa-code-fork" style="color: #fcfcfc"> Imperious22M/UltraGPS-Arduino</a>
+        </span>
+    
+    
+      <span><a href="../uploading/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../usage/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

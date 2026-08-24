@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><link rel="canonical" href="https://imperious22m.github.io/UltraGPS-Arduino/notes/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Notes - UltraGPS Arduino Firmware</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Notes";
+        var mkdocs_page_input_path = "notes.md";
+        var mkdocs_page_url = "/UltraGPS-Arduino/notes/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> UltraGPS Arduino Firmware
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../architecture/">Architecture</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../hardware/">Hardware</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../installation/">Installation</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../uploading/">Uploading</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../configuration/">Configuration</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../usage/">Usage</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../developer-guide/">Developer's Guide</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">UltraGPS Arduino Firmware</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Notes</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/Imperious22M/UltraGPS-Arduino/edit/master/docs/notes.md">Edit on Imperious22M/UltraGPS-Arduino</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h1>
+<p>Design notes, gotchas, and open items.</p>
+<h2 id="transmitter-station-is-the-radio-receiver">"Transmitter station" is the radio receiver<a class="headerlink" href="#transmitter-station-is-the-radio-receiver" title="Permanent link">&para;</a></h2>
+<p>The naming is inverted depending on which link you look at.
+<code>transmitter-station/src/main.cpp</code> opens with <em>"Receiver program for the
+UltraGPS system"</em> and its <code>RadioController::init()</code> defaults to
+<code>as_receiver = true</code>. Both are correct: the board <strong>receives</strong> on the radio link
+and <strong>transmits</strong> on the ultrasonic one. The directory name follows the
+ultrasonic role; the source comments follow the radio role.</p>
+<h2 id="the-shared-modules-are-copies-and-they-have-drifted">The shared modules are copies, and they have drifted<a class="headerlink" href="#the-shared-modules-are-copies-and-they-have-drifted" title="Permanent link">&para;</a></h2>
+<p><code>radio.*</code>, <code>timers.*</code>, <code>led_control.*</code>, and <code>debug_macros.h</code> exist separately in
+each project rather than in a shared library directory. <code>led_control.*</code> and
+<code>debug_macros.h</code> are still byte-identical, but the other two have diverged:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Difference</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>radio.cpp</code></td>
+<td>The base station calls <code>maskIRQ(true, true, false)</code> (IRQ on RX only); the transmitter does not. The pipes are opened in opposite directions, as they must be.</td>
+</tr>
+<tr>
+<td><code>timers.h/.cpp</code></td>
+<td><code>pllCorrect()</code> takes a second <code>tick_delay</code> argument on the base station and one argument on the transmitter. Only the transmitter's ISR applies <code>tick_delay</code> before pulsing.</td>
+</tr>
+</tbody>
+</table>
+<p>A fix applied to one copy does <strong>not</strong> reach the other. Consolidating them into
+a PlatformIO <code>lib/</code> directory shared by both projects would remove the hazard,
+but it is not done today.</p>
+<h2 id="interval-timers-in-loop-are-reset-every-iteration">Interval timers in <code>loop()</code> are reset every iteration<a class="headerlink" href="#interval-timers-in-loop-are-reset-every-iteration" title="Permanent link">&para;</a></h2>
+<p><code>base-station/src/main.cpp</code> declares its interval bookkeeping inside <code>loop()</code>:</p>
+<pre><code class="language-cpp">void loop()
+{
+    long currentTime = millis();
+    long lastSyncTime = 0;
+    long lastPulseTime = 0;
+    ...
+    if (millis() - lastSyncTime &gt;= (unsigned int)SYNC_PLL_INTERVAL) { ... }
+</code></pre>
+<p>Because <code>lastSyncTime</code> and <code>lastPulseTime</code> are re-initialised to <code>0</code> on every
+pass, both comparisons are true on every pass once the board has been up for a
+few milliseconds. In practice:</p>
+<ul>
+<li><code>syncPLL()</code> sends a packet on <strong>every loop iteration</strong>, not every 10 ms as
+  <code>SYNC_PLL_INTERVAL</code> suggests.</li>
+<li>In continuous mode, <code>continuousPollingDelay</code> (20 ms) has no effect. The real
+  rate limit is the blocking <code>while(!trigger_fired){}</code> wait inside
+  <code>handleUltrasonics()</code>, which ties output to the Timer1 rate — about 10 lines
+  per second at the default 10 Hz.</li>
+</ul>
+<p>Making the constants meaningful means declaring the two variables <code>static</code> (or
+moving them to file scope). Doing so would change the observed radio traffic and
+the continuous-mode rate, so it is a behavioural change, not a pure cleanup.</p>
+<h2 id="measure_echo_times-is-called-with-interrupts-enabled"><code>measure_echo_times()</code> is called with interrupts enabled<a class="headerlink" href="#measure_echo_times-is-called-with-interrupts-enabled" title="Permanent link">&para;</a></h2>
+<p>The call site reads:</p>
+<pre><code class="language-cpp">//! Measure the echo times without interrupts to avoid timing issues with the radio IRQ
+measure_echo_times(false);
+</code></pre>
+<p>The comment describes the opposite of what the argument does — <code>false</code> means
+<code>noInterrupts()</code> is <strong>not</strong> called, so interrupts stay enabled during sampling.
+The function supports both; only the comment is stale. Passing <code>true</code> would
+block the Timer1 ISR for the duration of the sampling window, which is why the
+enabled path is the one in use.</p>
+<h2 id="the-measurement-is-hard-wired-to-six-receivers-on-portc">The measurement is hard-wired to six receivers on <code>PORTC</code><a class="headerlink" href="#the-measurement-is-hard-wired-to-six-receivers-on-portc" title="Permanent link">&para;</a></h2>
+<p><code>echo_value()</code> is <code>PINC &amp; 63</code> — a single read of the low six bits of <code>PORTC</code>,
+which is what makes it fast enough to sample all six channels in one tight loop.
+The consequence is that <code>ECHO_PIN[]</code>, the <code>this_ticks[6]</code> arrays, and the print
+statement in <code>handleUltrasonics()</code> cannot be re-pointed by editing the array
+alone. Fewer than six receivers works — unused pins stay pulled up and report
+<code>0</code> — but more than six, or receivers on digital pins, needs the measurement and
+printing code changed too.</p>
+<p>The transition buffers <code>value[100]</code> and <code>ticks[100]</code> account for 500 of the
+923 bytes of RAM the base station uses. Sampling stops early if they fill.</p>
+<h2 id="half-built-features">Half-built features<a class="headerlink" href="#half-built-features" title="Permanent link">&para;</a></h2>
+<p>Several constants and code paths are present but inert. They are not dead code
+so much as unfinished work:</p>
+<ul>
+<li><strong><code>tick_delay</code> on the base station.</strong> <code>TRIGGER_TICK_DELAY</code> (100 ticks) is
+  declared but never sent; <code>handleUltrasonics()</code> passes a hard-coded
+  <code>SONIC_BURST_DELAY</code> of 2000 µs instead. The transmitter honours whatever
+  arrives.</li>
+<li><strong><code>syncPLL()</code>.</strong> It sends a trigger packet with <code>tick_delay = 0</code>, with the
+  intent of nudging the transmitter's PLL without firing the ultrasonic burst.
+  The transmitter has no way to distinguish this from a real trigger, so it
+  fires anyway. The source marks it <code>TODO … NOT YET IMPLEMENTED</code> and adds <em>"MAY
+  NOT EVER BE IMPLEMENTED"</em>.</li>
+<li><strong><code>LATENCY_COMPENSATION_US</code></strong> (4000 µs, <code>radio.h</code>, both projects) is declared
+  and never read.</li>
+<li><strong><code>TRIGGER_HIGH_DURATION</code></strong> (300 µs, base <code>main.cpp</code>) is declared and never
+  read; the actual pulse width is <code>TRIGGER_PULSE_US</code> in <code>timers.cpp</code>.</li>
+<li><strong><code>radioIRQPin</code></strong> is declared on the base station but no interrupt is attached
+  — only the transmitter uses its radio IRQ line.</li>
+<li><strong><code>STAT_1</code>–<code>STAT_3</code></strong> are wired and controllable but nothing drives them.</li>
+</ul>
+<h2 id="the-radio-link-is-deliberately-unreliable">The radio link is deliberately unreliable<a class="headerlink" href="#the-radio-link-is-deliberately-unreliable" title="Permanent link">&para;</a></h2>
+<p><code>setAutoAck(false)</code> and <code>setRetries(0, 0)</code> are intentional. A retried trigger
+packet would arrive after the moment it was meant to schedule, so a late packet
+is worse than a dropped one: a drop costs one measurement, a retry corrupts the
+phase relationship the whole system depends on. Missing measurements are handled
+downstream, not on the wire.</p>
+<h2 id="base-stationupload-is-out-of-date"><code>base-station/upload</code> is out of date<a class="headerlink" href="#base-stationupload-is-out-of-date" title="Permanent link">&para;</a></h2>
+<p>The Python helper at <code>base-station/upload</code> wraps <code>arduino-cli</code> with board
+selection (<code>--list</code>, <code>-p</code>, <code>-i</code>, <code>-b</code>). It defaults to a sketch named
+<code>base-station.ino</code>, which no longer exists — the project moved to PlatformIO and
+the sources now live in <code>base-station/src/</code>. It still works if you pass the
+source directory explicitly:</p>
+<pre><code class="language-bash">./base-station/upload -p /dev/ttyACM0 base-station/src
+</code></pre>
+<p><code>base-station/conversation-upload-script.md</code> is the development log from writing
+that script and is not documentation of the current layout. Prefer
+<code>./build.sh upload -s base</code>, which uses PlatformIO directly.</p>
+<h2 id="no-stop-command-for-continuous-mode">No stop command for continuous mode<a class="headerlink" href="#no-stop-command-for-continuous-mode" title="Permanent link">&para;</a></h2>
+<p><code>C</code> sets the polling state to <code>CONTINOUS</code> and nothing clears it except another
+command — <code>P</code> or <code>S</code>, both of which set it back to <code>POLLING</code> — or a board reset.
+There is no dedicated stop letter, and no timeout: a client that starts
+continuous mode and disconnects leaves the board streaming into a closed port.</p>
+<h2 id="possible-next-steps">Possible next steps<a class="headerlink" href="#possible-next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Move the four duplicated modules into a shared PlatformIO <code>lib/</code> directory so
+  the two projects cannot drift apart.</li>
+<li>Make <code>lastSyncTime</code> / <code>lastPulseTime</code> <code>static</code> so <code>SYNC_PLL_INTERVAL</code> and
+  <code>continuousPollingDelay</code> actually govern the rates.</li>
+<li>Add an explicit stop command for continuous mode, and consider a timeout that
+  drops back to polling if no command has been seen for a while.</li>
+<li>Finish or remove the <code>tick_delay</code> path and <code>syncPLL()</code>, so the timing model
+  has one mechanism rather than two half-mechanisms.</li>
+<li>Upgrade the docs theme to
+  <a href="https://squidfunk.github.io/mkdocs-material/">Material for MkDocs</a> by adding
+  <code>mkdocs-material</code> to <code>docs/requirements.txt</code> and setting <code>theme.name: material</code>
+  in <code>mkdocs.yml</code> (search, dark mode, better nav).</li>
+<li>Document the calibration constants (<code>A</code> and <code>B</code>) once they are established, so
+  the count-to-distance conversion lives alongside the firmware that produces
+  the counts.</li>
+</ul>
+              
+            </div>
+          </div><footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/Imperious22M/UltraGPS-Arduino" class="fa fa-code-fork" style="color: #fcfcfc"> Imperious22M/UltraGPS-Arduino</a>
+        </span>
+    
+    
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

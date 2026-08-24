@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><link rel="canonical" href="https://imperious22m.github.io/UltraGPS-Arduino/developer-guide/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Developer's Guide - UltraGPS Arduino Firmware</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Developer\u0027s Guide";
+        var mkdocs_page_input_path = "developer-guide.md";
+        var mkdocs_page_url = "/UltraGPS-Arduino/developer-guide/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> UltraGPS Arduino Firmware
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../architecture/">Architecture</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../hardware/">Hardware</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../installation/">Installation</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../uploading/">Uploading</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../configuration/">Configuration</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../usage/">Usage</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Developer's Guide</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#requirements">Requirements</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#flashing-a-prebuilt-release">Flashing a prebuilt release</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#using-the-build-script">Using the build script</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#commands">Commands</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#options">Options</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#compiling-the-firmware">Compiling the firmware</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#flashing">Flashing</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#watching-the-serial-output">Watching the serial output</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#building-the-release-artefacts">Building the release artefacts</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#cleaning">Cleaning</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#working-on-the-firmware">Working on the firmware</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#project-layout">Project layout</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#debugging">Debugging</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#previewing-the-documentation">Previewing the documentation</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#releasing-a-version">Releasing a version</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">UltraGPS Arduino Firmware</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Developer's Guide</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/Imperious22M/UltraGPS-Arduino/edit/master/docs/developer-guide.md">Edit on Imperious22M/UltraGPS-Arduino</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="developers-guide">Developer's Guide<a class="headerlink" href="#developers-guide" title="Permanent link">&para;</a></h1>
+<p>A self-contained reference for developers who <strong>fork the repository</strong> and need
+to work with the project's tooling — building, flashing, previewing the
+documentation, extending the firmware, and cutting releases. Everything needed
+is on this page.</p>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p>The repository holds two Arduino sketches, one per microcontroller in the
+UltraGPS positioning system:</p>
+<ul>
+<li><strong><code>base-station/</code></strong> — accepts single-letter commands over USB serial, sends
+  the trigger packet over the nRF24L01+ link, times the echoes returned by six
+  ultrasonic receivers on <code>A0</code>–<code>A5</code>, and prints the counts back over serial.
+  This is the board the ground-station program (<code>UltraGpsXY</code>) talks to.</li>
+<li><strong><code>transmitter-station/</code></strong> — listens for those radio packets, corrects its
+  Timer1 phase to match the base station, and pulses the ultrasonic
+  transmitter's trigger pin.</li>
+</ul>
+<h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>PlatformIO Core</strong> (<code>pio</code>) with Python 3 — builds and flashes the firmware</li>
+<li><strong><code>arduino-cli</code></strong> — optional, for flashing loose <code>.hex</code> files</li>
+<li><strong><code>git</code></strong> — to clone the repository (no submodules)</li>
+<li><strong>Python 3 with <code>pip</code></strong> — only needed to build/preview the documentation</li>
+</ul>
+<pre><code class="language-bash">git clone https://github.com/Imperious22M/UltraGPS-Arduino.git
+cd UltraGPS-Arduino
+
+python3 -m venv ~/.venvs/platformio
+~/.venvs/platformio/bin/pip install platformio
+export PATH=&quot;$HOME/.venvs/platformio/bin:$PATH&quot;
+</code></pre>
+<h2 id="flashing-a-prebuilt-release">Flashing a prebuilt release<a class="headerlink" href="#flashing-a-prebuilt-release" title="Permanent link">&para;</a></h2>
+<p>You do not need a build toolchain to run the firmware — each release ships
+prebuilt <code>.hex</code> images. Download them from the
+<a href="https://github.com/Imperious22M/UltraGPS-Arduino/releases/latest">Releases page</a>
+and flash with <code>arduino-cli</code>:</p>
+<pre><code class="language-bash">arduino-cli upload -p /dev/ttyACM0 -b arduino:avr:uno \
+    --input-file ultragps-base-station-v1.0.hex
+</code></pre>
+<h2 id="using-the-build-script">Using the build script<a class="headerlink" href="#using-the-build-script" title="Permanent link">&para;</a></h2>
+<p><code>build.sh</code> is the single entry point for building, flashing, cleaning,
+packaging, and previewing the docs. Run it from the repository root:</p>
+<pre><code class="language-bash">./build.sh &lt;command&gt; [options]
+</code></pre>
+<h3 id="commands">Commands<a class="headerlink" href="#commands" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>build</code></td>
+<td>Compile the firmware (both stations by default)</td>
+</tr>
+<tr>
+<td><code>upload</code></td>
+<td>Compile and flash one station</td>
+</tr>
+<tr>
+<td><code>monitor</code></td>
+<td>Open a 38400 bps serial monitor on one station</td>
+</tr>
+<tr>
+<td><code>clean</code></td>
+<td>Remove the <code>.pio/</code> build directories and <code>./dist</code></td>
+</tr>
+<tr>
+<td><code>dist</code></td>
+<td>Build both stations and collect the release artefacts into <code>./dist</code></td>
+</tr>
+<tr>
+<td><code>docs</code></td>
+<td>Preview the documentation locally with live reload</td>
+</tr>
+<tr>
+<td><code>docs-build</code></td>
+<td>Render the static documentation site into <code>./site/</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="options">Options<a class="headerlink" href="#options" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Applies to</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-s</code>, <code>--station</code></td>
+<td><code>build</code>, <code>upload</code>, <code>monitor</code>, <code>clean</code></td>
+<td><code>base</code>, <code>transmitter</code>, or <code>all</code> (default <code>all</code>; <code>upload</code> and <code>monitor</code> require a single station)</td>
+</tr>
+<tr>
+<td><code>-p</code>, <code>--port</code></td>
+<td><code>upload</code>, <code>monitor</code></td>
+<td>Override the port set in <code>platformio.ini</code></td>
+</tr>
+<tr>
+<td><code>-h</code>, <code>--help</code></td>
+<td>—</td>
+<td>Show usage</td>
+</tr>
+</tbody>
+</table>
+<h3 id="compiling-the-firmware">Compiling the firmware<a class="headerlink" href="#compiling-the-firmware" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">./build.sh build              # both stations
+./build.sh build -s base      # base station only
+</code></pre>
+<p>Each project's image lands at <code>&lt;project&gt;/.pio/build/uno/firmware.hex</code>.</p>
+<h3 id="flashing">Flashing<a class="headerlink" href="#flashing" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">./build.sh upload -s base
+./build.sh upload -s transmitter -p /dev/ttyACM2
+</code></pre>
+<p>The default ports are <code>/dev/ttyACM0</code> for the base station and <code>/dev/ttyACM1</code>
+for the transmitter; see <a href="../uploading/">Uploading</a> for how to confirm which is
+which.</p>
+<h3 id="watching-the-serial-output">Watching the serial output<a class="headerlink" href="#watching-the-serial-output" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">./build.sh monitor -s base
+</code></pre>
+<p>Then send <code>P</code>, <code>C</code>, or <code>S</code> — see <a href="../usage/">Usage</a>.</p>
+<h3 id="building-the-release-artefacts">Building the release artefacts<a class="headerlink" href="#building-the-release-artefacts" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">./build.sh dist
+</code></pre>
+<p>Produces, in <code>./dist</code>:</p>
+<ul>
+<li><code>ultragps-base-station-v&lt;VERSION&gt;.hex</code></li>
+<li><code>ultragps-transmitter-station-v&lt;VERSION&gt;.hex</code></li>
+<li><code>ultragps-arduino-sources-v&lt;VERSION&gt;.zip</code></li>
+</ul>
+<p>The version comes from the <code>VERSION</code> file at the repository root. The source zip
+is produced with <code>git archive</code>, so it contains only committed files — commit
+your changes before running it.</p>
+<h3 id="cleaning">Cleaning<a class="headerlink" href="#cleaning" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">./build.sh clean              # removes both .pio/ directories and ./dist
+./build.sh clean -s base      # base station only
+</code></pre>
+<h2 id="working-on-the-firmware">Working on the firmware<a class="headerlink" href="#working-on-the-firmware" title="Permanent link">&para;</a></h2>
+<h3 id="project-layout">Project layout<a class="headerlink" href="#project-layout" title="Permanent link">&para;</a></h3>
+<pre><code>base-station/
+  platformio.ini        board, ports, libraries
+  upload                arduino-cli helper (see Notes — out of date)
+  src/
+    main.cpp            setup/loop, command table, echo measurement
+    command_control.*   serial line buffering and dispatch
+    radio.*             nRF24L01+ setup and CommsPacket framing
+    timers.*            Timer1 CTC setup, TIMER1_COMPA ISR, PLL correction
+    led_control.*       status LEDs
+    debug_macros.h      compile-time-gated printing
+transmitter-station/
+  ...                   the same, minus command_control.*
+</code></pre>
+<div class="admonition note">
+<p class="admonition-title">The shared files are copies, not a library</p>
+</div>
+<h3 id="debugging">Debugging<a class="headerlink" href="#debugging" title="Permanent link">&para;</a></h3>
+<p>Uncomment <code>#define DEBUG</code> (or <code>#define INFO_DEBUG</code>) in the relevant project's
+<code>debug_macros.h</code> and rebuild. Remember that diagnostics share the serial port
+with the measurement output, so anything parsing that output will choke — see
+<a href="../configuration/">Configuration</a>.</p>
+<p>For testing the serial protocol without working ultrasonic hardware, use the
+<code>S</code> command or the <code>SIMULATE_REAL_COMMANDS</code> macro.</p>
+<h2 id="previewing-the-documentation">Previewing the documentation<a class="headerlink" href="#previewing-the-documentation" title="Permanent link">&para;</a></h2>
+<p>The docs are built with <a href="https://www.mkdocs.org/">MkDocs</a>. To preview them
+locally without pushing:</p>
+<pre><code class="language-bash">pip install -r docs/requirements.txt    # one-time: install MkDocs
+./build.sh docs                         # live preview at http://127.0.0.1:8000
+./build.sh docs-build                   # render static site into ./site/
+</code></pre>
+<p><code>mkdocs.yml</code> sets <code>strict: true</code>, so a broken internal link or a page missing
+from the nav fails the build.</p>
+<p>Pushing documentation changes to the <code>release</code> branch automatically rebuilds and
+republishes the site via GitHub Actions (<code>.github/workflows/docs.yml</code>), which
+runs <code>mkdocs gh-deploy</code> onto the <code>gh-pages</code> branch.</p>
+<h2 id="releasing-a-version">Releasing a version<a class="headerlink" href="#releasing-a-version" title="Permanent link">&para;</a></h2>
+<p>Released versions live in the repository's <strong>Releases</strong> tab, each with the two
+<code>.hex</code> images and a zip of the sketch sources attached. The <code>release</code> branch is
+the stable snapshot of the most recent release.</p>
+<p>Releases are made by pushing a <strong>version tag</strong> (<code>vX.Y</code>). Pushing the tag triggers
+the <code>Release</code> workflow (<code>.github/workflows/release.yml</code>), which builds both
+stations with PlatformIO and publishes a GitHub Release with the artefacts
+attached.</p>
+<p>To make a release:</p>
+<ol>
+<li>Bump the <code>VERSION</code> file at the repository root so it matches the tag you
+   intend to push — <code>1.0</code> for tag <code>v1.0</code>. The release workflow <strong>fails</strong> if the
+   tag and <code>VERSION</code> disagree, so this must be done first.</li>
+<li>
+<p>Push that commit onto the <code>release</code> branch:</p>
+<p><code>git checkout release
+git merge --ff-only &lt;your-dev-branch&gt;
+git push origin release</code></p>
+</li>
+<li>
+<p>Tag the release commit and push the tag:</p>
+<p><code>git tag vX.Y            # e.g. v1.0 — must match the VERSION file
+git push origin vX.Y</code></p>
+</li>
+</ol>
+<p>The workflow then builds both images and publishes a release named "UltraGPS
+Arduino Firmware vX.Y" with auto-generated notes and these assets:</p>
+<table>
+<thead>
+<tr>
+<th>Asset</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ultragps-base-station-vX.Y.hex</code></td>
+<td>Base-station firmware image</td>
+</tr>
+<tr>
+<td><code>ultragps-transmitter-station-vX.Y.hex</code></td>
+<td>Transmitter-station firmware image</td>
+</tr>
+<tr>
+<td><code>ultragps-arduino-sources-vX.Y.zip</code></td>
+<td>Both sketches and their PlatformIO project files</td>
+</tr>
+</tbody>
+</table>
+<p>Users can then flash without building anything:</p>
+<pre><code class="language-bash">arduino-cli upload -p /dev/ttyACM0 -b arduino:avr:uno \
+    --input-file ultragps-base-station-vX.Y.hex
+</code></pre>
+<p>To verify locally what the workflow will produce, run <code>./build.sh dist</code> and
+inspect <code>./dist</code>.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../usage/" class="btn btn-neutral float-left" title="Usage"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/Imperious22M/UltraGPS-Arduino" class="fa fa-code-fork" style="color: #fcfcfc"> Imperious22M/UltraGPS-Arduino</a>
+        </span>
+    
+    
+      <span><a href="../usage/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>
