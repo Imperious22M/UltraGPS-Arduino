@@ -1,8 +1,6 @@
 # Configuration
 
-All configuration is **compile-time**. Neither sketch reads a config file or
-accepts runtime settings, so every change on this page requires editing a source
-file and re-uploading — see [Uploading](uploading.md).
+All configuration are **compile-time**, which means that any change in these settings will need to be re-uploaded to the board.
 
 ## Where each setting lives
 
@@ -67,7 +65,7 @@ provides four; the default on both is 10 Hz:
 timer1_init_10Hz();   // in setup(), base-station and transmitter-station
 ```
 
-| Function | Rate | `OCR1A` |
+| Function | Rate | `OCR1A value` |
 |----------|------|---------|
 | `timer1_init_5Hz()` | 5 Hz | 12498 |
 | `timer1_init_10Hz()` | 10 Hz | 6249 |
@@ -97,21 +95,6 @@ assign the same value to `timer1_top`.
 | `SONIC_BURST_DELAY` | `main.cpp` (base, inside `handleUltrasonics()`) | `2*1000` | Microseconds the transmitter waits after the packet before firing, giving the receivers time to settle into receive mode |
 | `SYNC_PLL_INTERVAL` | `main.cpp` (base) | `10` | Milliseconds between PLL sync packets |
 | `tick_delay` | `timers.cpp` (transmitter) | set by radio | Applied as `delayMicroseconds()` at the top of the ISR. Hard-capped at 16383 µs by `delayMicroseconds()`. |
-
-## Receivers
-
-```cpp
-constexpr uint8_t ECHO_PIN[] = {A0, A1, A2, A3, A4, A5};
-constexpr uint8_t RECV_CNT   = sizeof(ECHO_PIN)/sizeof(ECHO_PIN[0]);
-#define echo_value() (PINC & 63)
-```
-
-`RECV_CNT` follows the array automatically, but `echo_value()`, the `this_ticks`
-arrays, and the print statement in `handleUltrasonics()` are all hard-coded to
-six channels on `PORTC`. Using fewer than six receivers works if you leave the
-unused pins pulled up — they simply never transition and report `0`. Using
-**more** than six, or moving a receiver off `A0`–`A5`, requires editing the
-measurement and printing code as well. See [Notes](notes.md).
 
 ## Sampling window
 
@@ -167,8 +150,7 @@ LedControl leds(3, 4, 6, 7, 8);   //! STAT_1, STAT_2, STAT_3, PULSE_TRIG, RADIO_
 
 Both sketches call `leds.init(0)` in `setup()`, which skips the startup
 animation. Change it to `leds.init(1)` to run the ~2.5 s LED chase on every
-reset — handy for spotting unexpected reboots, but it delays the first
-measurement by that long.
+reset.
 
 ## Debug output
 
@@ -225,15 +207,3 @@ constexpr int VARIATION = 50;
     `onSimulatePulse()` calls `handleUltrasonics(false)` before faking the
     numbers, so the radio must still initialise or the sketch halts in `setup()`.
     It does not need the ultrasonic hardware or the receivers.
-
-## Declared but unused
-
-These constants are present in the sources but nothing reads them. They are
-listed here so you do not change one and expect an effect:
-
-| Constant | File |
-|----------|------|
-| `TRIGGER_HIGH_DURATION` (300 µs) | `base-station/src/main.cpp` |
-| `TRIGGER_TICK_DELAY` (100 ticks) | `base-station/src/main.cpp` |
-| `radioIRQPin` (pin 2) | `base-station/src/main.cpp` — the base station never attaches the interrupt |
-| `LATENCY_COMPENSATION_US` (4000 µs) | `radio.h`, both projects |

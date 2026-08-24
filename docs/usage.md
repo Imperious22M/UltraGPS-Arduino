@@ -57,7 +57,7 @@ error for a bad command, so silence after a command means it was not recognised.
 ## Output format
 
 Every measurement is one line: a two-character mode marker, then six
-comma-separated counts, one per receiver, in `A0`–`A5` order.
+comma-separated ticks, one per receiver, in `A0`–`A5` order.
 
 ```
 N: 4404, 3226, 4063, 4041, 3133, 4109
@@ -75,7 +75,7 @@ streamed data on the same port.
 ### What the numbers mean
 
 Each value is the number of sampling-loop iterations between the trigger and
-that receiver's echo going low — a **count**, not microseconds and not
+that receiver's echo going low — a **tick**, not microseconds and not
 millimetres. Converting to distance takes the form `Ax + B`, where `A` scales
 counts to time or distance and `B` absorbs the fact that counting does not start
 at exactly zero. Both constants are determined by calibration downstream; the

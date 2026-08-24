@@ -18,10 +18,6 @@ UltraGPS positioning system:
   Timer1 phase to match the base station, and pulses the ultrasonic
   transmitter's trigger pin.
 
-Both are PlatformIO projects targeting an Arduino Uno. The only third-party
-dependency, [`nRF24/RF24`](https://github.com/nRF24/RF24), is declared in
-`lib_deps` and downloaded on first build — nothing is vendored.
-
 ## Requirements
 
 - **PlatformIO Core** (`pio`) with Python 3 — builds and flashes the firmware
@@ -150,72 +146,6 @@ transmitter-station/
 ```
 
 !!! note "The shared files are copies, not a library"
-    `radio.*`, `timers.*`, `led_control.*`, and `debug_macros.h` exist
-    independently in each project and have drifted apart — the base station's
-    `radio.cpp` calls `maskIRQ()` and opens the pipes the other way round, and
-    the transmitter's `timers.cpp` applies `tick_delay` in the ISR while the
-    base station's does not. **Fix a bug in one and you must port it to the
-    other by hand.** See [Notes](notes.md).
-
-### Adding a serial command
-
-The base station's command set is a table of single ASCII letters. To add one:
-
-1. **Add the identity** to `CommandType` in `command_control.h`:
-
-    ```cpp
-    enum class CommandType : uint8_t {
-        PULSE, SIMULATE, CONTINOUS,
-        RESET,          // <- new
-        UNKNOWN,
-    };
-    ```
-
-2. **Write the callback** in `main.cpp`. It takes the decoded arguments and
-   returns nothing:
-
-    ```cpp
-    void onReset(const CmdArg*) {
-        cmdCtrl.pollingState = PollingState::POLLING;
-    }
-    ```
-
-3. **Define the command** — type, argument count, argument types, callback:
-
-    ```cpp
-    static const CommandDef CMD_RESET = { CommandType::RESET, 0, {}, onReset };
-    ```
-
-4. **Register the letter** in the global table:
-
-    ```cpp
-    static const CommandEntry GLOBAL_CMD_TABLE[] = {
-        { 'P', &CMD_PULSE     },
-        { 'S', &CMD_SIMULATE  },
-        { 'C', &CMD_CONTINOUS },
-        { 'R', &CMD_RESET     },   // <- new
-    };
-    ```
-
-`CommandControl` picks the table size up with `sizeof`, so nothing else needs
-updating.
-
-Commands can take arguments. `CommandDef` carries a count and a per-argument
-`ArgType` (`INT` or `FLOAT`), and `decode()` parses them off the rest of the
-line with `strtol`/`strtod`:
-
-```cpp
-static const CommandDef CMD_SETDELAY =
-    { CommandType::SET_DELAY, 1, { ArgType::INT }, onSetDelay };
-```
-
-Sending `D 250` then calls `onSetDelay` with `args[0].i == 250`. A commented-out
-example of exactly this sits in `main.cpp`.
-
-!!! note "Keep argument types to INT where you can"
-    `CmdArg` is a union of `int32_t` and `float`, which only works because both
-    are four bytes on AVR. The comment in `command_control.cpp` says as much —
-    if you port to a platform where that stops holding, use integers only.
 
 ### Debugging
 
@@ -239,16 +169,11 @@ pip install -r docs/requirements.txt    # one-time: install MkDocs
 ```
 
 `mkdocs.yml` sets `strict: true`, so a broken internal link or a page missing
-from the nav fails the build rather than shipping quietly.
+from the nav fails the build.
 
 Pushing documentation changes to the `release` branch automatically rebuilds and
 republishes the site via GitHub Actions (`.github/workflows/docs.yml`), which
 runs `mkdocs gh-deploy` onto the `gh-pages` branch.
-
-!!! note "One-time GitHub Pages setup on a fork"
-    In **Settings → Pages**, set the source to *Deploy from a branch* →
-    `gh-pages` / `(root)`. Then update `site_url`, `repo_url`, and `repo_name`
-    in `mkdocs.yml` to point at your fork.
 
 ## Releasing a version
 
@@ -256,19 +181,19 @@ Released versions live in the repository's **Releases** tab, each with the two
 `.hex` images and a zip of the sketch sources attached. The `release` branch is
 the stable snapshot of the most recent release.
 
-Releases are cut by pushing a **version tag** (`vX.Y`). Pushing the tag triggers
+Releases are made by pushing a **version tag** (`vX.Y`). Pushing the tag triggers
 the `Release` workflow (`.github/workflows/release.yml`), which builds both
 stations with PlatformIO and publishes a GitHub Release with the artefacts
 attached.
 
-To cut a release:
+To make a release:
 
 1. Bump the `VERSION` file at the repository root so it matches the tag you
    intend to push — `1.0` for tag `v1.0`. The release workflow **fails** if the
    tag and `VERSION` disagree, so this must be done first.
 2. Push that commit onto the `release` branch:
 
-    ```bash
+    ```
     git checkout release
     git merge --ff-only <your-dev-branch>
     git push origin release
@@ -276,7 +201,7 @@ To cut a release:
 
 3. Tag the release commit and push the tag:
 
-    ```bash
+    ```
     git tag vX.Y            # e.g. v1.0 — must match the VERSION file
     git push origin vX.Y
     ```

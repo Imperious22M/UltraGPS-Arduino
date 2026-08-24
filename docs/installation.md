@@ -40,7 +40,7 @@ require building from source).
 - **`git`** — to clone the repository.
 
 The AVR compiler toolchain and the `RF24` library are downloaded automatically
-by PlatformIO on the first build; nothing is vendored in the repository.
+by PlatformIO on the first build.
 
 ### Installing PlatformIO Core
 
@@ -67,7 +67,7 @@ arduino-cli core install arduino:avr
 
 ### Serial port permissions (Linux)
 
-The Uno appears as `/dev/ttyACM0`, `/dev/ttyACM1`, … Your user must be in the
+The Arduino's usually appears as `/dev/ttyACM<some number>` Your user must be in the
 `dialout` group to open it:
 
 ```bash
@@ -83,8 +83,6 @@ git clone https://github.com/Imperious22M/UltraGPS-Arduino.git
 cd UltraGPS-Arduino
 ```
 
-There are no submodules — a plain clone is complete.
-
 ## Build
 
 Each station is built separately with `pio run -d <project>`:
@@ -99,20 +97,8 @@ The first build takes a couple of minutes while PlatformIO downloads the
 project's artefacts land in `<project>/.pio/build/uno/`, with the flashable
 image at `firmware.hex`.
 
-A clean build of the current sources fits comfortably on an Uno:
-
-| Project | Flash | RAM |
-|---------|-------|-----|
-| `base-station` | 10230 B (31.7 % of 32256 B) | 923 B (45.1 % of 2048 B) |
-| `transmitter-station` | 4242 B (13.2 %) | 242 B (11.8 %) |
-
 To clean:
 
 ```bash
 pio run -d base-station --target clean
 ```
-
-!!! note "`.pio/` is not tracked"
-    Each project's `.gitignore` excludes `.pio/`, so build output and the
-    downloaded `RF24` copy never enter the repository. Deleting the directory is
-    always safe.

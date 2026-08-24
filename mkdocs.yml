@@ -8,9 +8,7 @@ site_url: https://imperious22m.github.io/UltraGPS-Arduino/
 repo_url: https://github.com/Imperious22M/UltraGPS-Arduino
 repo_name: Imperious22M/UltraGPS-Arduino
 
-# Built-in theme — no extra pip packages required. To upgrade to Material
-# (search, nicer nav, dark mode) add `mkdocs-material` to docs/requirements.txt
-# and change this to `name: material`.
+# Built-in theme
 theme:
   name: readthedocs
 
@@ -23,18 +21,14 @@ nav:
   - Configuration: configuration.md
   - Usage: usage.md
   - Developer's Guide: developer-guide.md
-  - Notes: notes.md
 
 markdown_extensions:
   - admonition
   - toc:
       permalink: true
 
-# requirements.txt lives in docs/ for convenience but is a build input, not a
-# page — keep it out of the published site.
 exclude_docs: |
   requirements.txt
 
-# Fail the build on broken internal links / missing nav pages so CI catches
-# documentation mistakes instead of silently shipping them.
+# Fail the build on broken internal links / missing nav pages
 strict: true

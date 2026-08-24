@@ -1,9 +1,8 @@
 # Architecture
 
 The repository contains **two independent PlatformIO projects**, one per
-microcontroller. They share four source files by copy (`radio`, `led_control`,
-`timers`, `debug_macros`) — there is no shared library directory, so a change to
-one station's copy does not propagate to the other.
+Arduino. They share four source files by copy (`radio`, `led_control`,
+`timers`, `debug_macros`)
 
 ## Projects
 
@@ -13,10 +12,6 @@ one station's copy does not propagate to the other.
 | `transmitter-station/` | Arduino Uno wired to the ultrasonic transmitter | Radio slave, PLL phase correction, fires the ultrasonic trigger |
 
 !!! note "The transmitter station is the radio *receiver*"
-    `transmitter-station/src/main.cpp` opens with the comment
-    *"Receiver program for the UltraGPS system"*. That refers to its role on the
-    **radio** link — it receives packets from the base station. On the
-    **ultrasonic** side it is the transmitter. See [Notes](notes.md).
 
 ## Modules
 
@@ -36,7 +31,7 @@ a small set of single-purpose modules.
 
 [`nRF24/RF24`](https://github.com/nRF24/RF24) is declared in each
 `platformio.ini` as `lib_deps` and is downloaded into `.pio/libdeps/` on the
-first build — it is not vendored in the repository.
+first build.
 
 ## Data flow
 
@@ -50,8 +45,8 @@ first build — it is not vendored in the repository.
    │  CommandControl ──► handleUltrasonics()  │
    │        │                    ▲            │
    │  RadioController      measure_echo_times │
-   └────────┬──────────────────────┬──────────┘
-            │ nRF24 CommsPacket    │ echoes on A0–A5
+   └────────┬─────────────────────────────────┘
+            │ nRF24 CommsPacket    ▲ echoes on A0–A5
             │ (TCNT1, tick_delay)  │
             ▼                      │
    ┌────────────────────┐          │
@@ -72,17 +67,17 @@ first build — it is not vendored in the repository.
    the global command table.
 2. `handleUltrasonics()` clears `trigger_fired` and calls
    `RadioController::sendTrigger(TCNT1, SONIC_BURST_DELAY)`. The packet carries
-   the base station's current Timer1 count and a 2000 µs delay.
+   the base station's current Timer1 count and a µs delay.
 3. The transmitter station's radio raises its IRQ line. `onRadioIRQ()` reads the
    packet and calls `pllCorrect(timer_val - TCNT1)`, nudging the local Timer1 so
    the two boards stay in phase, and stores the tick delay.
 4. Both boards' Timer1 reach compare-match. Each `TIMER1_COMPA_vect` ISR pulses
    its trigger pin (pin 5) for 50 µs and sets `trigger_fired`. On the
-   transmitter that pulse fires the ultrasonic burst.
+   transmitter that pulse fires the ultrasonic burst, while on the receiver it triggers
+   the receive functionality of the receivers.
 5. The base station, released from its `while(!trigger_fired)` wait, runs
    `measure_echo_times()`. It polls `PINC & 63` in a tight loop for up to
-   ~60 ms, recording every change of the six echo lines along with the loop
-   iteration count at which it changed.
+   some amount of (~60 at the time of writing) ms, recording every change of the six echo lines along with the loop iteration count at which it changed.
 6. The recorded transitions are reduced to one tick count per receiver, and the
    six values are printed over serial as one comma-separated line.
 
@@ -103,9 +98,9 @@ them aligned. Because the packet carries the base station's raw `TCNT1`, the
 transmitter can compute its phase error directly and add it to its own `TCNT1` —
 a one-step software PLL, implemented as `pllCorrect()` in `timers.h`.
 
-!!! note "The echo counts are not the timer ticks"
+!!! note "Ticks are not the same as Timer1 counts:"
     The values printed over serial are **loop iterations** of the sampling loop
-    in `measure_echo_times()`, not Timer1 ticks. They carry an `Ax + B` type
+    in `measure_echo_times()`, are not Timer1 ticks. They carry an `Ax + B` type
     relationship to distance: `A` converts counts to time/distance and `B`
     absorbs the fact that counting does not begin exactly at zero. Calibration
     is done downstream, not on the Arduino.

@@ -18,8 +18,7 @@ microcontrollers:
 
 Both are PlatformIO projects targeting an Arduino Uno. The only third-party
 dependency, [`nRF24/RF24`](https://github.com/nRF24/RF24), is declared in
-`lib_deps` and downloaded on the first build — nothing is vendored, and a plain
-clone is complete.
+`lib_deps` and downloaded on the first build.
 
 The base station is the board that the
 [UltraGPS Ground Station](https://github.com/Imperious22M/UltraGPS-Ground)
@@ -32,7 +31,7 @@ for the pin map, configuration reference, command set, and design notes.
 
 - **PlatformIO Core** (`pio`) with Python 3 — builds and flashes the firmware
 - **`arduino-cli`** — optional, for flashing loose `.hex` files
-- **`git`** — no submodules
+- **`git`** 
 
 ```bash
 git clone https://github.com/Imperious22M/UltraGPS-Arduino.git
@@ -46,7 +45,7 @@ export PATH="$HOME/.venvs/platformio/bin:$PATH"
 On Linux your user must be in the `dialout` group to reach the serial port:
 
 ```bash
-sudo usermod -aG dialout "$USER"   # log out and back in
+sudo usermod -aG dialout "$USER"   # After running this log out and back in
 ```
 
 ## Quick start
@@ -57,20 +56,23 @@ prebuilt `.hex` images. Download them from the
 and flash each board:
 
 ```bash
+# For the base-station:
 arduino-cli upload -p /dev/ttyACM0 -b arduino:avr:uno \
     --input-file ultragps-base-station-v1.0.hex
 
+# For the transmitter-station
 arduino-cli upload -p /dev/ttyACM1 -b arduino:avr:uno \
     --input-file ultragps-transmitter-station-v1.0.hex
 ```
 
-Then open a serial monitor at 38400 bps and send `P`:
+Then open a serial monitor at 38400 bps and send the "pulse" command `P`:
 
+Example response (may be all 0's if no receiver towers are connected):
 ```
 N: 4404, 3226, 4063, 4041, 3133, 4109
 ```
 
-Each value is one receiver's echo count, in `A0`–`A5` order.
+Each value is one receiver's tick count, in `A0`–`A5` order.
 
 ## Using the build script
 
@@ -116,7 +118,7 @@ default ports are `/dev/ttyACM0` for the base station and `/dev/ttyACM1` for the
 transmitter — run `arduino-cli board list` to confirm which board is on which
 port before flashing.
 
-Plain PlatformIO works too, if you'd rather skip the script:
+Using Platform IO (recommended):
 
 ```bash
 pio run -d base-station
@@ -131,11 +133,11 @@ pio run -d base-station --target upload
 
 | Command | Effect |
 |---------|--------|
-| `P` | Fire one pulse and print one `N:` line |
-| `C` | Enter continuous mode — a stream of `C:` lines |
-| `S` | Fire one pulse but print **simulated** counts |
+| `P` | Fire one pulse and print one normal command `N:` |
+| `C` | Enter continuous mode — a stream of continous responses `C:` |
+| `S` | Simulates a `P` command and prints **simulated** counts |
 
-Commands must be terminated with a newline or carriage return. `P` or `S` ends
+Commands must be terminated with a newline or carriage return. Any `P` or `S` commands end
 continuous mode.
 
 ### Building the release artefacts
@@ -155,14 +157,13 @@ Produces the two `.hex` images and a zip of the sketch sources, named from the
 
 ## Configuration
 
-All configuration is compile-time — neither sketch reads a config file. The
-settings you are most likely to change:
+All configuration are compile-time:
 
 | Setting | Where |
 |---------|-------|
 | Serial port used for upload/monitor | `<project>/platformio.ini` |
 | Baud rate (38400) | `BAUD_RATE` in `<project>/src/main.cpp` **and** `monitor_speed` |
-| Pulse rate (10 Hz) | the `timer1_init_*Hz()` call in `setup()` — **change on both boards** |
+| Pulse rate (10 Hz) | the `timer1_init_*Hz()` call in `setup()` — **Needs change on both boards** |
 | Radio channel, power, pipes | `RadioController::init()` in `<project>/src/radio.cpp` |
 | Debug output | `#define DEBUG` / `INFO_DEBUG` in `<project>/src/debug_macros.h` |
 | Simulated data | the `S` command, or `SIMULATE_REAL_COMMANDS` in `base-station/src/main.cpp` |
@@ -173,5 +174,4 @@ page for the complete reference.
 ## Developer's Guide
 
 See the **[Developer's Guide](https://imperious22m.github.io/UltraGPS-Arduino/developer-guide/)**
-in the documentation for more details, including how to add a serial command and
-how to cut a release.
+in the documentation for more details.

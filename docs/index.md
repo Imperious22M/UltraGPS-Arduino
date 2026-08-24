@@ -3,7 +3,8 @@
 Arduino firmware for the St. Mary's University **UltraGPS** positioning system,
 developed as part of graduate research.
 
-The repository holds the two sketches that run on the system's microcontrollers.
+The repository holds the two Arduino scripts that run on the Arduino Uno's that
+are the physical backbone of the system.
 The **base station** accepts single-letter commands over USB serial, tells the
 transmitter over a 2.4 GHz radio link when to fire, times the ultrasonic echoes
 returned by six receivers, and prints the resulting tick counts back over serial.
@@ -23,12 +24,10 @@ program (`UltraGpsXY`) talks to over USB serial.
 - **[Installation](installation.md)** — installing the toolchain (PlatformIO or
   `arduino-cli`) and getting the sources.
 - **[Uploading](uploading.md)** — flashing each sketch onto the right board.
-- **[Configuration](configuration.md)** — every compile-time setting you can
-  change, and where it lives.
+- **[Configuration](configuration.md)** — every compile-time setting and where it lives.
 - **[Usage](usage.md)** — the serial command set and the output format.
 - **[Developer's Guide](developer-guide.md)** — a self-contained reference for
-  anyone forking the repository, including how to cut a release.
-- **[Notes](notes.md)** — design notes, gotchas, and open items.
+  anyone forking the repository
 
 ## At a glance
 
@@ -37,7 +36,7 @@ program (`UltraGpsXY`) talks to over USB serial.
 | Sketches | `base-station/`, `transmitter-station/` |
 | Board | Arduino Uno (ATmega328P, 16 MHz) |
 | Framework | Arduino, built with PlatformIO (`platform = atmelavr`) |
-| Library | [`nRF24/RF24`](https://github.com/nRF24/RF24) (pulled in automatically) |
+| Depedency | [`nRF24/RF24`](https://github.com/nRF24/RF24) (pulled in automatically) |
 | Serial | 38400 bps, 8N1 |
 | Radio | nRF24L01+, channel 100, 1 Mbps, 8-byte fixed payload |
 | Pulse rate | 10 Hz (Timer1, CTC mode) |

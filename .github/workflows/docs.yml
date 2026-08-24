@@ -1,6 +1,6 @@
 name: Deploy Docs
 
-# Build the MkDocs site and publish it to the gh-pages branch, which GitHub
+# Builds the MkDocs site and pushes it to the gh-pages branch, which GitHub
 # Pages serves as the project page:
 #   https://imperious22m.github.io/UltraGPS-Arduino/
 #

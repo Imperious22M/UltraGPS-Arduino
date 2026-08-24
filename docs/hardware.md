@@ -12,7 +12,7 @@ radio IRQ line, which only the transmitter station uses.
 | nRF24L01+ radio module | 2 | 2.4 GHz, SPI |
 | HC-SR04-style ultrasonic transmitter | 1 | Driven by the transmitter station |
 | Ultrasonic receivers | 6 | Echo lines feed the base station's `A0`–`A5` |
-| Status LEDs (+ resistors) | 10 | Five per station |
+| Status LEDs (+ resistors, optional) | 10 | Five per station |
 
 !!! note "Power the radio properly"
     The nRF24L01+ draws current in bursts that the Uno's 3.3 V regulator handles
@@ -25,7 +25,7 @@ Defined in `base-station/src/main.cpp` and `base-station/src/timers.cpp`.
 
 | Pin | Direction | Signal | Set in |
 |-----|-----------|--------|--------|
-| `2` | — | Radio IRQ — **declared but unused** on this board | `main.cpp` (`radioIRQPin`) |
+| `2` | — | Radio IRQ — **declared but unused** | `main.cpp` (`radioIRQPin`) |
 | `3` | OUT | `STAT_1` LED | `LedControl leds(3, 4, 6, 7, 8)` |
 | `4` | OUT | `STAT_2` LED | " |
 | `5` | OUT | Trigger pulse (50 µs, fired by the Timer1 ISR) | `timers.cpp` (`triggerPin`) |
@@ -59,10 +59,9 @@ Defined in `transmitter-station/src/main.cpp` and
 | `8` | OUT | `RADIO_STATUS` LED |
 | `9` | OUT | Radio `CE` |
 | `10` | OUT | Radio `CSN` |
-| `11`–`13` | — | Hardware SPI to the radio |
+| `11`–`13` | IN/OUT | Hardware SPI to the radio |
 
-Pin 2 must be interrupt-capable — on the Uno that means pin 2 or 3. If you move
-it, update `radioIRQPin` in `main.cpp`.
+Pin 2 must be interrupt-capable.
 
 ## Radio link
 
@@ -81,8 +80,7 @@ except for which pipe they write to:
 | Transmitter listens on | `PIPE_TX_TO_RX`, writes to `PIPE_RX_TO_TX` (`0xF0F0F0F0E2`) |
 
 Auto-ack and retries are deliberately off: a late trigger packet is worse than a
-lost one, so the link is fire-and-forget. The `RX_TO_TX` pipe is opened on both
-sides but nothing currently sends on it.
+lost one, so the link is fire-and-forget.
 
 The 8-byte payload is `CommsPacket` (`radio.h`):
 
@@ -101,10 +99,10 @@ state, so `getStat1()` and friends never need a `digitalRead` on an output pin.
 | LED | Meaning |
 |-----|---------|
 | `RADIO_STATUS` (pin 8) | Solid once the radio initialises. **Blinking on a two-second cycle means radio init failed** and the sketch has halted. |
-| `PULSE_TRIG` (pin 7) | Lit while a trigger is in flight |
+| `PULSE_TRIG` (pin 7) | Lit while a trigger is in active |
 | `STAT_1`–`STAT_3` (pins 3, 4, 6) | Reserved — wired and controllable, but nothing currently drives them |
 
 Both sketches call `leds.init(0)`, which sets the pins to output and drives them
 low **without** the startup animation. Pass `leds.init(1)` (or omit the
 argument) to run `startupAnimation()` — a chase pattern across all five LEDs,
-useful as a quick "the board rebooted" indicator. It takes about 2.5 seconds.
+useful as a quick "the board rebooted" indicator.
