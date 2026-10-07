@@ -36,6 +36,7 @@ silently discarded.
 | `P` | Fire one pulse and measure the echoes. Leaves (or returns to) polling mode. | One `N:` line |
 | `C` | Enter continuous mode — measure and report repeatedly until interrupted | A stream of `C:` lines |
 | `S` | Fire one pulse but report **simulated** counts. Returns to polling mode. | One `N:` line |
+| `R` | Reset the transmitter station over the radio, then reset the base station itself | `N: R` |
 
 !!! note "Line endings matter"
     `CommandControl::poll()` only dispatches a command when it sees `\n` or
@@ -45,8 +46,21 @@ silently discarded.
 
 ### Leaving continuous mode
 
-There is no stop command. Send `P` or `S` — both set the polling state back to
-`POLLING`, which ends the stream. Resetting the board works too.
+There is no dedicated stop command. Send `P` or `S` — both set the polling state
+back to `POLLING`, which ends the stream. `R` ends it too, by resetting the
+board.
+
+### Resetting the system
+
+`R` sends a reset packet to the transmitter station, replies with the line
+`N: R`, and then resets the base station as well. Both boards reboot and the
+PLL re-locks on the first sync packet. Expect the serial port to be silent for
+about a second while the base station comes back; the ground-station program
+should treat `N: R` as the acknowledgement and re-sync afterwards.
+
+The reset packet is sent three times because the radio link has no
+acknowledgements. If the transmitter station is powered off or out of range it
+is simply missed; the base station still resets itself.
 
 ### Invalid input
 

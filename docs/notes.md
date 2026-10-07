@@ -4,27 +4,33 @@ Design notes, gotchas, and open items.
 
 ## "Transmitter station" is the radio receiver
 
-The naming is inverted depending on which link you look at.
-`transmitter-station/src/main.cpp` opens with *"Receiver program for the
-UltraGPS system"* and its `RadioController::init()` defaults to
-`as_receiver = true`. Both are correct: the board **receives** on the radio link
-and **transmits** on the ultrasonic one. The directory name follows the
-ultrasonic role; the source comments follow the radio role.
+The naming is inverted depending on which link you look at. The transmitter
+station initialises its radio with `RADIO_ROLE_TRANSMITTER`, which in
+`shared/radio/radio.cpp` means *listen*. Both are correct: the board
+**receives** on the radio link and **transmits** on the ultrasonic one. The
+directory name follows the ultrasonic role; the radio code names things after
+which station they belong to (`PIPE_BASE_TO_TRANSMITTER`).
 
-## The shared modules are copies, and they have drifted
+## The radio layer is shared; the other modules are still copies
 
-`radio.*`, `timers.*`, `led_control.*`, and `debug_macros.h` exist separately in
-each project rather than in a shared library directory. `led_control.*` and
-`debug_macros.h` are still byte-identical, but the other two have diverged:
+`radio.*` now lives once in `shared/radio/` and is compiled into both projects
+through `lib_extra_dirs = ../shared`. The one behavioural difference the two old
+copies had — only the base station called `maskIRQ(true, true, false)` — is
+resolved by applying it on both ends; the transmitter station's ISR already
+ignored everything but `rx_ready`, so this only removes spurious IRQ edges.
+
+`timers.*`, `led_control.*`, and `debug_macros.h` are still per-project copies.
+`led_control.*` and `debug_macros.h` are byte-identical, but `timers.*` has
+diverged:
 
 | File | Difference |
 |------|-----------|
-| `radio.cpp` | The base station calls `maskIRQ(true, true, false)` (IRQ on RX only); the transmitter does not. The pipes are opened in opposite directions, as they must be. |
 | `timers.h/.cpp` | `pllCorrect()` takes a second `tick_delay` argument on the base station and one argument on the transmitter. Only the transmitter's ISR applies `tick_delay` before pulsing. |
 
-A fix applied to one copy does **not** reach the other. Consolidating them into
-a PlatformIO `lib/` directory shared by both projects would remove the hazard,
-but it is not done today.
+A fix applied to one copy does **not** reach the other. The same `shared/`
+mechanism would work for these too; `debug_macros.h` is the awkward one because
+the shared radio code includes it from the project's `src/` (via
+`build_flags = -I src`) so that the debug level stays per-project.
 
 ## Interval timers in `loop()` are reset every iteration
 
@@ -97,7 +103,7 @@ so much as unfinished work:
   The transmitter has no way to distinguish this from a real trigger, so it
   fires anyway. The source marks it `TODO … NOT YET IMPLEMENTED` and adds *"MAY
   NOT EVER BE IMPLEMENTED"*.
-- **`LATENCY_COMPENSATION_US`** (4000 µs, `radio.h`, both projects) is declared
+- **`LATENCY_COMPENSATION_US`** (4000 µs, `shared/radio/radio.h`) is declared
   and never read.
 - **`TRIGGER_HIGH_DURATION`** (300 µs, base `main.cpp`) is declared and never
   read; the actual pulse width is `TRIGGER_PULSE_US` in `timers.cpp`.
@@ -132,14 +138,25 @@ that script and is not documentation of the current layout. Prefer
 ## No stop command for continuous mode
 
 `C` sets the polling state to `CONTINOUS` and nothing clears it except another
-command — `P` or `S`, both of which set it back to `POLLING` — or a board reset.
-There is no dedicated stop letter, and no timeout: a client that starts
-continuous mode and disconnects leaves the board streaming into a closed port.
+command — `P` or `S`, both of which set it back to `POLLING`, or `R`, which
+resets the board — or a hardware reset. There is no dedicated stop letter, and
+no timeout: a client that starts continuous mode and disconnects leaves the
+board streaming into a closed port.
+
+## The `R` command resets the base station too
+
+`R` is a whole-system reset: the base station sends `PKT_RESET` to the
+transmitter station, prints `N: R`, waits `RESET_SELF_DELAY_MS`, and then
+watchdog-resets itself. Set `RESET_SELF_AFTER_REMOTE_RESET` to `false` in
+`base-station/src/main.cpp` to reset only the remote board. The reset packet
+carries `RESET_MAGIC` so that a corrupted trigger packet cannot be mistaken for
+a reset; the link's 16-bit CRC already makes that unlikely.
 
 ## Possible next steps
 
-- Move the four duplicated modules into a shared PlatformIO `lib/` directory so
-  the two projects cannot drift apart.
+- Move the remaining duplicated modules (`timers`, `led_control`,
+  `debug_macros`) into `shared/` alongside the radio layer so the two projects
+  cannot drift apart.
 - Make `lastSyncTime` / `lastPulseTime` `static` so `SYNC_PLL_INTERVAL` and
   `continuousPollingDelay` actually govern the rates.
 - Add an explicit stop command for continuous mode, and consider a timeout that

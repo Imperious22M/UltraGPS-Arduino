@@ -33,12 +33,12 @@ program (`UltraGpsXY`) talks to over USB serial.
 
 | | |
 |---|---|
-| Sketches | `base-station/`, `transmitter-station/` |
+| Sketches | `base-station/`, `transmitter-station/` (+ `shared/` libraries used by both) |
 | Board | Arduino Uno (ATmega328P, 16 MHz) |
 | Framework | Arduino, built with PlatformIO (`platform = atmelavr`) |
 | Depedency | [`nRF24/RF24`](https://github.com/nRF24/RF24) (pulled in automatically) |
 | Serial | 38400 bps, 8N1 |
-| Radio | nRF24L01+, channel 100, 1 Mbps, 8-byte fixed payload |
+| Radio | nRF24L01+, channel 125, 1 Mbps, 8-byte fixed payload |
 | Pulse rate | 10 Hz (Timer1, CTC mode) |
 | Receivers | 6, on `A0`–`A5` |
 

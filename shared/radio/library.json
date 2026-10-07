@@ -1,0 +1,10 @@
+{
+  "name": "ultragps-radio",
+  "version": "1.0.0",
+  "description": "Shared nRF24L01+ radio layer for the UltraGPS base and transmitter stations",
+  "frameworks": "arduino",
+  "platforms": "atmelavr",
+  "dependencies": {
+    "nRF24/RF24": "*"
+  }
+}

@@ -101,7 +101,7 @@ which.
 ./build.sh monitor -s base
 ```
 
-Then send `P`, `C`, or `S` — see [Usage](usage.md).
+Then send `P`, `C`, `S`, or `R` — see [Usage](usage.md).
 
 ### Building the release artefacts
 
@@ -131,13 +131,17 @@ your changes before running it.
 ### Project layout
 
 ```
+shared/                 libraries compiled into BOTH projects
+  radio/
+    radio.*             nRF24L01+ setup, pipe addresses, CommsPacket framing
+    library.json        declares the RF24 dependency
+  sysreset/
+    sysreset.h          watchdog-based software reset
 base-station/
-  platformio.ini        board, ports, libraries
-  upload                arduino-cli helper (see Notes — out of date)
+  platformio.ini        board, ports, libraries, lib_extra_dirs = ../shared
   src/
     main.cpp            setup/loop, command table, echo measurement
     command_control.*   serial line buffering and dispatch
-    radio.*             nRF24L01+ setup and CommsPacket framing
     timers.*            Timer1 CTC setup, TIMER1_COMPA ISR, PLL correction
     led_control.*       status LEDs
     debug_macros.h      compile-time-gated printing
@@ -145,7 +149,13 @@ transmitter-station/
   ...                   the same, minus command_control.*
 ```
 
-!!! note "The shared files are copies, not a library"
+!!! note "Radio code is shared; the other modules are still copies"
+    Each `platformio.ini` sets `lib_extra_dirs = ../shared`, so PlatformIO's
+    library finder compiles `shared/radio` and `shared/sysreset` into both
+    firmware images. `build_flags = -I src` lets the shared code include the
+    project's `debug_macros.h`. `timers.*`, `led_control.*` and
+    `debug_macros.h` are still per-project copies, and a change to one does not
+    reach the other.
 
 ### Debugging
 

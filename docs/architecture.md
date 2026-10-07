@@ -1,8 +1,12 @@
 # Architecture
 
 The repository contains **two independent PlatformIO projects**, one per
-Arduino. They share four source files by copy (`radio`, `led_control`,
-`timers`, `debug_macros`)
+Arduino, plus a `shared/` directory of libraries that both projects compile in.
+The radio layer (`shared/radio/`) and the software-reset helper
+(`shared/sysreset/`) live there, so pipe addresses, radio settings, packet
+framing and every send/receive function are defined exactly once. The remaining
+modules (`led_control`, `timers`, `debug_macros`) are still copied into each
+project.
 
 ## Projects
 
@@ -10,6 +14,7 @@ Arduino. They share four source files by copy (`radio`, `led_control`,
 |---------|---------|----------------|
 | `base-station/` | Arduino Uno wired to the six receivers | Serial command interface, radio master, echo timing, serial output |
 | `transmitter-station/` | Arduino Uno wired to the ultrasonic transmitter | Radio slave, PLL phase correction, fires the ultrasonic trigger |
+| `shared/` | both | PlatformIO libraries pulled in by each project via `lib_extra_dirs = ../shared` |
 
 !!! note "The transmitter station is the radio *receiver*"
 
@@ -21,7 +26,8 @@ a small set of single-purpose modules.
 | Module | Files | Responsibility |
 |--------|-------|----------------|
 | Control | `main.cpp` | Pin/module setup, command callbacks, main loop |
-| Radio | `radio.{h,cpp}` | nRF24L01+ setup, `CommsPacket` framing, send/receive |
+| Radio | `shared/radio/radio.{h,cpp}` | nRF24L01+ setup, pipe addresses, `CommsPacket` framing, send/receive (**shared**) |
+| Reset | `shared/sysreset/sysreset.h` | Watchdog-based software reset used by the `R` command (**shared**) |
 | Timers | `timers.{h,cpp}` | Timer1 CTC setup, the `TIMER1_COMPA` ISR, PLL correction |
 | LEDs | `led_control.{h,cpp}` | Status LED state, startup animation |
 | Debug | `debug_macros.h` | Compile-time-gated `DEBUG_*` / `DEBUG_INFO_*` printing |
@@ -38,7 +44,7 @@ first build.
 ```
    Ground station PC  (UltraGpsXY)
           │  (USB serial, /dev/ttyACM0 @ 38400)
-          │  commands: P / S / C        data: "N: t0, ..., t5"
+          │  commands: P / S / C / R    data: "N: t0, ..., t5"
           ▼
    ┌──────────────────────────────────────────┐
    │            BASE STATION                  │
@@ -48,6 +54,7 @@ first build.
    └────────┬─────────────────────────────────┘
             │ nRF24 CommsPacket    ▲ echoes on A0–A5
             │ (TCNT1, tick_delay)  │
+            │ or PKT_RESET         │
             ▼                      │
    ┌────────────────────┐          │
    │ TRANSMITTER STATION│          │
@@ -80,6 +87,22 @@ first build.
    some amount of (~60 at the time of writing) ms, recording every change of the six echo lines along with the loop iteration count at which it changed.
 6. The recorded transitions are reduced to one tick count per receiver, and the
    six values are printed over serial as one comma-separated line.
+
+## Resetting both boards
+
+The `R` command resets the whole system without touching either board:
+
+1. The base station sends a `PKT_RESET` packet (`RadioController::sendReset()`),
+   repeated three times because the link has no acknowledgements.
+2. It prints `N: R` over serial as the acknowledgement and flushes the UART.
+3. The transmitter station's radio ISR sees the packet, verifies the
+   `RESET_MAGIC` value in its `timestamp` field, and sets a flag that `loop()`
+   turns into a watchdog reset (`systemReset()` in `shared/sysreset/sysreset.h`).
+4. After a short delay the base station resets itself the same way, so both
+   boards come up fresh and the PLL re-locks on the first sync packet.
+
+Both sketches call `systemResetGuard()` first thing in `setup()` to disarm the
+watchdog that a software reset leaves running.
 
 ## Timing model
 

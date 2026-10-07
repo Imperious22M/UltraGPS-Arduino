@@ -70,25 +70,25 @@ except for which pipe they write to:
 
 | Setting | Value |
 |---------|-------|
-| Channel | `100` |
+| Channel | `125` (`RADIO_CHANNEL` in `shared/radio/radio.h`) |
 | Data rate | `RF24_1MBPS` |
 | PA level | `RF24_PA_HIGH` |
 | Payload | 8 bytes, fixed (dynamic payloads disabled) |
 | Auto-ack | Off |
 | Retries | `setRetries(0, 0)` — none |
-| Base station writes to | `PIPE_TX_TO_RX` (`0xF0F0F0F0E1`) |
-| Transmitter listens on | `PIPE_TX_TO_RX`, writes to `PIPE_RX_TO_TX` (`0xF0F0F0F0E2`) |
+| Base station writes to | `PIPE_BASE_TO_TRANSMITTER` (`0xF0F0F0F0E1`) |
+| Transmitter listens on | `PIPE_BASE_TO_TRANSMITTER`, writes to `PIPE_TRANSMITTER_TO_BASE` (`0xF0F0F0F0E2`) |
 
 Auto-ack and retries are deliberately off: a late trigger packet is worse than a
 lost one, so the link is fire-and-forget.
 
-The 8-byte payload is `CommsPacket` (`radio.h`):
+The 8-byte payload is `CommsPacket` (`shared/radio/radio.h`):
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `type` | `PacketType` | `PKT_NO_DATA` (1) or `PKT_TRIGGER` (2) |
+| `type` | `PacketType` | `PKT_NO_DATA` (1), `PKT_TRIGGER` (2) or `PKT_RESET` (3) |
 | `_pad[3]` | `uint8_t` | Alignment padding to keep the struct at 8 bytes |
-| `timestamp` | `uint16_t` | The base station's `TCNT1` at send time |
+| `timestamp` | `uint16_t` | The base station's `TCNT1` at send time; `RESET_MAGIC` (`0xA55A`) in a reset packet |
 | `tick_delay` | `uint16_t` | Microseconds the transmitter waits before firing |
 
 ## Status LEDs

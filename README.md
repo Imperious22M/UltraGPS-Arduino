@@ -16,7 +16,9 @@ microcontrollers:
   Timer1 phase to stay locked to the base station, and pulses the ultrasonic
   transmitter's trigger pin.
 
-Both are PlatformIO projects targeting an Arduino Uno. The only third-party
+Both are PlatformIO projects targeting an Arduino Uno. The radio layer they
+share (pipe addresses, packet framing, send/receive) lives once in `shared/`
+and is compiled into both via `lib_extra_dirs`. The only third-party
 dependency, [`nRF24/RF24`](https://github.com/nRF24/RF24), is declared in
 `lib_deps` and downloaded on the first build.
 
@@ -136,8 +138,9 @@ pio run -d base-station --target upload
 | `P` | Fire one pulse and print one normal command `N:` |
 | `C` | Enter continuous mode — a stream of continous responses `C:` |
 | `S` | Simulates a `P` command and prints **simulated** counts |
+| `R` | Resets the transmitter station over the radio, replies `N: R`, then resets the base station |
 
-Commands must be terminated with a newline or carriage return. Any `P` or `S` commands end
+Commands must be terminated with a newline or carriage return. Any `P`, `S` or `R` command ends
 continuous mode.
 
 ### Building the release artefacts
@@ -164,7 +167,7 @@ All configuration are compile-time:
 | Serial port used for upload/monitor | `<project>/platformio.ini` |
 | Baud rate (38400) | `BAUD_RATE` in `<project>/src/main.cpp` **and** `monitor_speed` |
 | Pulse rate (10 Hz) | the `timer1_init_*Hz()` call in `setup()` — **Needs change on both boards** |
-| Radio channel, power, pipes | `RadioController::init()` in `<project>/src/radio.cpp` |
+| Radio channel, power, pipes | `shared/radio/radio.h` and `RadioController::init()` in `shared/radio/radio.cpp` — **shared by both boards** |
 | Debug output | `#define DEBUG` / `INFO_DEBUG` in `<project>/src/debug_macros.h` |
 | Simulated data | the `S` command, or `SIMULATE_REAL_COMMANDS` in `base-station/src/main.cpp` |
 

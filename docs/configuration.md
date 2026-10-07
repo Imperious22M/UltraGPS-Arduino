@@ -10,13 +10,14 @@ All configuration are **compile-time**, which means that any change in these set
 | `<project>/src/main.cpp` | Baud rate, pin assignments, command table, sampling window, simulation |
 | `<project>/src/timers.cpp` | Pulse rate, trigger pin, trigger pulse width |
 | `<project>/src/command_control.h` | Continuous-mode rate, command buffer limits (base station only) |
-| `<project>/src/radio.{h,cpp}` | Radio channel, data rate, power, pipe addresses |
+| `shared/radio/radio.{h,cpp}` | Radio channel, data rate, power, pipe addresses, packet types (**shared by both boards**) |
 | `<project>/src/debug_macros.h` | Debug output level |
 
 !!! note "Some settings must be changed on both boards"
-    The baud rate, pulse rate, and radio parameters exist independently in each
-    project. Change one and the boards stop agreeing. Each entry below says
-    whether it needs to be kept in sync.
+    The baud rate and pulse rate exist independently in each project. Change one
+    and the boards stop agreeing. Each entry below says whether it needs to be
+    kept in sync. The radio parameters are the exception: they live once in
+    `shared/radio/` and are compiled into both images.
 
 ## PlatformIO project settings
 
@@ -121,19 +122,35 @@ it and truncate the measurement.
 
 ## Radio
 
-Set in `RadioController::init()` in `radio.cpp`, and identical on both boards
-apart from the pipe direction. **Every one of these must match on both boards.**
+Set in `shared/radio/radio.h` (constants) and `RadioController::init()` in
+`shared/radio/radio.cpp`. Because the file is shared, **a change here reaches
+both boards on the next build** — rebuild and flash both.
 
 | Setting | Default | Notes |
 |---------|---------|-------|
-| `setChannel(100)` | `100` | 0–125. Change on both boards to dodge Wi-Fi interference. |
-| `setDataRate(RF24_1MBPS)` | 1 Mbps | `RF24_250KBPS` gives more range at the cost of latency |
-| `setPALevel(RF24_PA_HIGH)` | HIGH | Drop to `RF24_PA_LOW` if the modules are close and the supply is marginal |
-| `setPayloadSize(8)` | 8 | Must equal `sizeof(CommsPacket)` |
+| `RADIO_CHANNEL` | `125` | 0–125. Change to dodge Wi-Fi interference. |
+| `RADIO_DATA_RATE` | `RF24_1MBPS` | `RF24_250KBPS` gives more range at the cost of latency |
+| `RADIO_PA_LEVEL` | `RF24_PA_HIGH` | Drop to `RF24_PA_LOW` if the modules are close and the supply is marginal |
+| `setPayloadSize(sizeof(CommsPacket))` | 8 | A `static_assert` keeps the struct at 8 bytes |
 | `setAutoAck(false)` | off | Deliberate — a retried trigger would arrive too late to be useful |
 | `setRetries(0, 0)` | none | Same reason |
-| `PIPE_TX_TO_RX` | `0xF0F0F0F0E1` | Base → transmitter. Change on both boards if two UltraGPS systems share a room. |
-| `PIPE_RX_TO_TX` | `0xF0F0F0F0E2` | Opened both ways but currently unused |
+| `maskIRQ(true, true, false)` | RX only | The IRQ pin asserts only when a packet arrives |
+| `PIPE_BASE_TO_TRANSMITTER` | `0xF0F0F0F0E1` | Base → transmitter station. Change if two UltraGPS systems share a room. |
+| `PIPE_TRANSMITTER_TO_BASE` | `0xF0F0F0F0E2` | Opened both ways but currently unused |
+| `RESET_MAGIC` | `0xA55A` | Value a `PKT_RESET` packet must carry to be honoured |
+| `RESET_PACKET_REPEATS` | `3` | Copies of the reset packet sent per `R` command |
+
+Which end of the link a board is comes from the `RadioRole` passed to
+`RadioController::init()` in each `main.cpp`: `RADIO_ROLE_BASE` opens the pipes
+for writing to the transmitter station, `RADIO_ROLE_TRANSMITTER` opens them the
+other way round and starts listening.
+
+The `R` command's own behaviour is set in `base-station/src/main.cpp`:
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `RESET_SELF_AFTER_REMOTE_RESET` | `true` | After sending the reset packet, reset the base station too |
+| `RESET_SELF_DELAY_MS` | `100` | Delay before the self-reset, so the `N: R` line gets out |
 
 Radio pins are set where the controller is constructed in `main.cpp`:
 

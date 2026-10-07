@@ -39,6 +39,7 @@ enum class CommandType : uint8_t {
     PULSE,      //! 'P' — trigger an ultrasonic pulse
     SIMULATE,   //! 'S' — run in simulation mode
     CONTINOUS,  //! 'C' — run in continuous mode 
+    RESET,      //! 'R' — reset the transmitter station over radio, then this board
     UNKNOWN,
 };
 

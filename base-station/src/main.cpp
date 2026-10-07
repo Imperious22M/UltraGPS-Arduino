@@ -49,6 +49,7 @@ determine distance.
 #include "led_control.h"
 #include "command_control.h"
 #include "timers.h"
+#include "sysreset.h"
 
 //! Definition to simulate "real" commands with pulse data
 //! Used during development to test the serial communication and command handling without needing to trigger the ultrasonic sensor
@@ -66,7 +67,15 @@ constexpr unsigned int BAUD_RATE  = 38400;
 constexpr unsigned long SYNC_PLL_INTERVAL = 10;  //! How often to send a sync packet to the receiver to synchronize its PLL (milliseconds)
 
 //! Tick delay sent to receiver: how many Timer1 ticks after the packet arrives to fire the trigger.
-constexpr uint16_t TRIGGER_TICK_DELAY = 100;
+constexpr uint16_t TRIGGER_TICK_DELAY = 0;
+
+//! Reset command ('R') behaviour: after sending the reset packet to the transmitter
+//! station the base station also resets itself so both boards start from a clean state.
+//! Set to false to only reset the transmitter station.
+constexpr bool RESET_SELF_AFTER_REMOTE_RESET = false;
+//! Milliseconds to wait after the reset packet before resetting ourselves, so the
+//! acknowledgement line has left the UART and the remote board has rebooted.
+constexpr uint16_t RESET_SELF_DELAY_MS = 100;
 
 //! Instantiate all classes
 constexpr uint8_t radioIRQPin = 2;    //! Must be interrupt-capable (2 or 3 on Uno)
@@ -80,6 +89,7 @@ void onSetDelay(const CmdArg* args);
 void onContinuous(const CmdArg* args);
 void onSimulatePulse(const CmdArg*);
 void onSimulateContinous(const CmdArg* args);
+void onReset(const CmdArg* args);
 
 //! Command definitions
 #ifdef SIMULATE_REAL_COMMANDS
@@ -90,6 +100,7 @@ static const CommandDef CMD_PULSE    = { CommandType::PULSE,     0, {}, onPulse 
 static const CommandDef CMD_CONTINOUS = { CommandType::CONTINOUS,  0, {}, onContinuous };
 #endif
 static const CommandDef CMD_SIMULATE = { CommandType::SIMULATE,  0, {}, onSimulatePulse};
+static const CommandDef CMD_RESET    = { CommandType::RESET,     0, {}, onReset };
 //! Example of command with an argument
 //static const CommandDef CMD_SETDELAY = { CommandType::SET_DELAY, 1, { ArgType::INT },    onSetDelay };
 
@@ -98,12 +109,16 @@ static const CommandEntry GLOBAL_CMD_TABLE[] = {
     { 'P', &CMD_PULSE    },  //! Trigger ultrasonic pulse
     { 'S', &CMD_SIMULATE },  //! Run simulation mode
     { 'C', &CMD_CONTINOUS },  //! Run continuous mode
+    { 'R', &CMD_RESET    },  //! Reset the transmitter station (and this board)
 };
 
 CommandControl cmdCtrl(GLOBAL_CMD_TABLE, sizeof(GLOBAL_CMD_TABLE) / sizeof(GLOBAL_CMD_TABLE[0]));
 
 void setup()
 {
+  //! Disarm the watchdog left running by a software reset (see sysreset.h)
+  systemResetGuard();
+
   //! Serial setup
   Serial.begin(BAUD_RATE);
   while (!Serial && millis() < 3000);
@@ -123,8 +138,8 @@ void setup()
   //! Pin Setup
   pinMode(triggerPin, OUTPUT);
 
-  // Initialize radio
-  if (!radioCtrl.init()) {
+  // Initialize radio as the link master (sends to the transmitter station)
+  if (!radioCtrl.init(RADIO_ROLE_BASE)) {
     Serial.println(F("[ERROR] Radio init failed. Halting."));
     while (true) {
       Serial.println(F("[ERROR] Still halted."));
@@ -361,6 +376,26 @@ void onSimulateContinous(const CmdArg*) {
     String(this_ticks[5]);
 
     Serial.println(responseString);
+}
+
+//! 'R' — reset the transmitter station over the radio link, acknowledge with
+//! "N: R" on serial, then (optionally) reset this board as well.
+void onReset(const CmdArg*) {
+    DEBUG_INFO_PRINTLN("[CMD] Reset requested");
+    cmdCtrl.pollingState = PollingState::POLLING;
+
+    bool sent = radioCtrl.sendReset();
+    leds.setPulseTrig(sent);
+
+    //! Acknowledge in the same "N: ..." format as a measurement line
+    Serial.println(F("N: R"));
+    Serial.flush();
+
+    if (RESET_SELF_AFTER_REMOTE_RESET) {
+        delay(RESET_SELF_DELAY_MS);
+        systemReset();   //! does not return
+    }
+    leds.setPulseTrig(false);
 }
 
 //! Periodically sends a trigger packet to synchronize the receiver's PLL

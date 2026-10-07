@@ -156,7 +156,7 @@ cmd_dist() {
     ( cd "$PROJECT_DIR" && git archive --format=zip \
         --prefix="ultragps-arduino-v${version}/" \
         -o "$DIST_DIR/ultragps-arduino-sources-v${version}.zip" \
-        HEAD "$BASE_PROJECT" "$TX_PROJECT" README.md VERSION )
+        HEAD "$BASE_PROJECT" "$TX_PROJECT" shared README.md VERSION )
 
     echo ">> Done:"
     ls -1 "$DIST_DIR"
