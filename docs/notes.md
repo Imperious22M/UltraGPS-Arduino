@@ -50,8 +50,9 @@ Because `lastSyncTime` and `lastPulseTime` are re-initialised to `0` on every
 pass, both comparisons are true on every pass once the board has been up for a
 few milliseconds. In practice:
 
-- `syncPLL()` sends a packet on **every loop iteration**, not every 10 ms as
-  `SYNC_PLL_INTERVAL` suggests.
+- `syncPLL()` sends a `PKT_SYNC` on **every loop iteration**, not every 10 ms
+  as `SYNC_PLL_INTERVAL` suggests. Harmless to the burst delay since sync
+  packets no longer carry one, but it is a lot of radio traffic.
 - In continuous mode, `continuousPollingDelay` (20 ms) has no effect. The real
   rate limit is the blocking `while(!trigger_fired){}` wait inside
   `handleUltrasonics()`, which ties output to the Timer1 rate — about 10 lines
@@ -98,11 +99,10 @@ so much as unfinished work:
   declared but never sent; `handleUltrasonics()` passes a hard-coded
   `SONIC_BURST_DELAY` of 2000 µs instead. The transmitter honours whatever
   arrives.
-- **`syncPLL()`.** It sends a trigger packet with `tick_delay = 0`, with the
-  intent of nudging the transmitter's PLL without firing the ultrasonic burst.
-  The transmitter has no way to distinguish this from a real trigger, so it
-  fires anyway. The source marks it `TODO … NOT YET IMPLEMENTED` and adds *"MAY
-  NOT EVER BE IMPLEMENTED"*.
+- **`syncPLL()`** now sends a dedicated `PKT_SYNC` packet, so the transmitter
+  corrects its phase without touching the stored burst delay. The transmitter
+  still fires its burst on every compare match regardless; the sync packet only
+  stops the delay from being reset to zero between measurements.
 - **`LATENCY_COMPENSATION_US`** (4000 µs, `shared/radio/radio.h`) is declared
   and never read.
 - **`TRIGGER_HIGH_DURATION`** (300 µs, base `main.cpp`) is declared and never
@@ -142,6 +142,15 @@ command — `P` or `S`, both of which set it back to `POLLING`, or `R`, which
 resets the board — or a hardware reset. There is no dedicated stop letter, and
 no timeout: a client that starts continuous mode and disconnects leaves the
 board streaming into a closed port.
+
+## The stored burst delay survives reflashing
+
+`D` writes its result to EEPROM, and `avrdude` does not touch EEPROM on a
+normal upload, so a board keeps using a searched delay across firmware
+versions. If a measurement looks off after a reflash, send `E` to confirm the
+compiled-in default is in use. The record is self-validating (magic plus an
+inverted copy of the value), so changing `SONIC_BURST_DELAY` in source has no
+effect while a stored value exists.
 
 ## The `R` command resets the base station too
 

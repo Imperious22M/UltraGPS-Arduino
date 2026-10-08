@@ -50,6 +50,7 @@ determine distance.
 #include "command_control.h"
 #include "timers.h"
 #include "sysreset.h"
+#include "delay_store.h"
 
 //! Definition to simulate "real" commands with pulse data
 //! Used during development to test the serial communication and command handling without needing to trigger the ultrasonic sensor
@@ -66,8 +67,31 @@ constexpr unsigned int BAUD_RATE  = 38400;
 //! PLL Synchronization Parameters
 constexpr unsigned long SYNC_PLL_INTERVAL = 10;  //! How often to send a sync packet to the receiver to synchronize its PLL (milliseconds)
 
-//! Tick delay sent to receiver: how many Timer1 ticks after the packet arrives to fire the trigger.
-constexpr uint16_t TRIGGER_TICK_DELAY = 0;
+//! Default burst delay sent to the transmitter station with every measurement trigger (microseconds).
+//! Experimentally the ultrasonic receivers need a few ms to "send" their own
+//! burst and go into receive mode, so the transmitter's burst is delayed to make
+//! sure the receivers are listening by the time it arrives.
+//! This is the compiled-in default. The 'D' command searches for a better value,
+//! stores it in EEPROM and applies it; the 'E' command returns to this default.
+constexpr uint16_t SONIC_BURST_DELAY = 2*1000; //! 2ms delay
+static_assert(SONIC_BURST_DELAY > 0, "a zero tick delay is reserved and ignored by the transmitter station");
+
+//! Burst delay actually in use. Loaded from EEPROM in setup() if a value was
+//! stored by the 'D' command, otherwise SONIC_BURST_DELAY.
+uint16_t burst_delay_us = SONIC_BURST_DELAY;
+
+//! Do not send a trigger packet in the last part of the Timer1 cycle: the packet
+//! would race the compare match and the transmitter could fire with the previous
+//! trigger's delay. 125 ticks = 2 ms at 16 us/tick.
+constexpr uint16_t TRIGGER_SEND_GUARD_TICKS = 125;
+
+//! Delay search ('D' command): sweep the burst delay and report the value that
+//! gives the lowest mean tick count across the receivers.
+constexpr uint16_t SEARCH_DELAY_MIN_US     = 0;    //! First delay tried (microseconds)
+constexpr uint16_t SEARCH_DELAY_MAX_US     = 500;  //! Last delay tried (inclusive)
+constexpr uint16_t SEARCH_DELAY_STEP_US    = 10;   //! Step between tries
+constexpr uint8_t  SEARCH_SAMPLES_PER_STEP = 3;    //! Pulses averaged at each delay
+constexpr bool     SEARCH_PRINT_STEPS      = true; //! Also print one "D: ..." line per step
 
 //! Reset command ('R') behaviour: after sending the reset packet to the transmitter
 //! station the base station also resets itself so both boards start from a clean state.
@@ -90,6 +114,8 @@ void onContinuous(const CmdArg* args);
 void onSimulatePulse(const CmdArg*);
 void onSimulateContinous(const CmdArg* args);
 void onReset(const CmdArg* args);
+void onDelaySearch(const CmdArg* args);
+void onDelayDefault(const CmdArg* args);
 
 //! Command definitions
 #ifdef SIMULATE_REAL_COMMANDS
@@ -101,6 +127,8 @@ static const CommandDef CMD_CONTINOUS = { CommandType::CONTINOUS,  0, {}, onCont
 #endif
 static const CommandDef CMD_SIMULATE = { CommandType::SIMULATE,  0, {}, onSimulatePulse};
 static const CommandDef CMD_RESET    = { CommandType::RESET,     0, {}, onReset };
+static const CommandDef CMD_DELAYSRCH = { CommandType::DELAY_SEARCH, 0, {}, onDelaySearch };
+static const CommandDef CMD_DELAYDFLT = { CommandType::DELAY_DEFAULT, 0, {}, onDelayDefault };
 //! Example of command with an argument
 //static const CommandDef CMD_SETDELAY = { CommandType::SET_DELAY, 1, { ArgType::INT },    onSetDelay };
 
@@ -110,6 +138,8 @@ static const CommandEntry GLOBAL_CMD_TABLE[] = {
     { 'S', &CMD_SIMULATE },  //! Run simulation mode
     { 'C', &CMD_CONTINOUS },  //! Run continuous mode
     { 'R', &CMD_RESET    },  //! Reset the transmitter station (and this board)
+    { 'D', &CMD_DELAYSRCH },  //! Search for the best burst delay, store and apply it
+    { 'E', &CMD_DELAYDFLT },  //! Clear the stored burst delay, back to the default
 };
 
 CommandControl cmdCtrl(GLOBAL_CMD_TABLE, sizeof(GLOBAL_CMD_TABLE) / sizeof(GLOBAL_CMD_TABLE[0]));
@@ -137,6 +167,15 @@ void setup()
   
   //! Pin Setup
   pinMode(triggerPin, OUTPUT);
+
+  //! Use the burst delay found by a previous 'D' search, if one is stored
+  uint16_t stored_delay;
+  if (delayStoreLoad(stored_delay)) {
+    burst_delay_us = stored_delay;
+    DEBUG_INFO_PRINTF("[SETUP] Using stored burst delay: %u us\n", burst_delay_us);
+  } else {
+    DEBUG_INFO_PRINTF("[SETUP] Using default burst delay: %u us\n", burst_delay_us);
+  }
 
   // Initialize radio as the link master (sends to the transmitter station)
   if (!radioCtrl.init(RADIO_ROLE_BASE)) {
@@ -253,15 +292,18 @@ void measure_echo_times(bool noInterruptsFlag = false) {
 
 //! Handler function for handling the ultrasonic sensor pulses and printing the tick values
 //! If print is true, it will print the values to serial. If false, it will just measure the echo times and set the LEDs without printing.
-void handleUltrasonics(bool print = true) {
-    //! Experimentally the ultrasonic sensor needs about 3ms to "send" the ultrasonic
-    //! burst and go into receiver mode. We do not care about the ultrasonic
-    //! burst, so we just wait delay the activation of the trigger pin at the transmitter
-    //! to ensure that the receiver is in receive mode by the time the transmitter's 
-    //! burst is sent.
-    constexpr uint16_t SONIC_BURST_DELAY = 2*1000; //! 2ms delay
+//! delay_us is the delay the transmitter station applies before firing its burst.
+//! It defaults to the delay in force (burst_delay_us: stored by 'D' or the compiled-in
+//! SONIC_BURST_DELAY); the delay search passes its own values here.
+void handleUltrasonics(bool print = true, uint16_t delay_us = burst_delay_us) {
+    //! If the compare match is imminent, let this cycle's trigger pass first so the
+    //! packet has a full cycle to arrive before the transmitter fires with it.
+    if ((uint16_t)(timer1_top - TCNT1) < TRIGGER_SEND_GUARD_TICKS) {
+        trigger_fired = false;
+        while(!trigger_fired){};
+    }
     trigger_fired = false; //! Clear the trigger flag to prepare for the next pulse
-    bool success = radioCtrl.sendTrigger(TCNT1, SONIC_BURST_DELAY); 
+    bool success = radioCtrl.sendTrigger(TCNT1, delay_us); 
 
     //! Wait for next pulse
     while(!trigger_fired){};
@@ -398,13 +440,97 @@ void onReset(const CmdArg*) {
     leds.setPulseTrig(false);
 }
 
-//! Periodically sends a trigger packet to synchronize the receiver's PLL
+//! 'D' — sweep the burst delay from SEARCH_DELAY_MIN_US to SEARCH_DELAY_MAX_US and
+//! report the delay with the lowest mean tick count across all receivers.
+//! A receiver that reports 0 (no echo) is excluded from the mean; delays with more
+//! valid readings are always preferred over delays with fewer, so a delay that
+//! makes receivers miss the burst cannot win by averaging zeros.
+//! The winner is saved to EEPROM and becomes the delay in force (burst_delay_us)
+//! immediately and on every later boot, until 'E' clears it.
+//! If no step produced a single valid reading nothing is stored or changed.
+//! Output: "D: <best_delay_us>, <mean_ticks>, <valid_readings>/<total_readings>"
+void onDelaySearch(const CmdArg*) {
+    DEBUG_INFO_PRINTLN("[CMD] Delay search started");
+    cmdCtrl.pollingState = PollingState::POLLING;
+
+    uint16_t      best_delay = SEARCH_DELAY_MIN_US;
+    unsigned long best_avg   = 0;
+    uint16_t      best_valid = 0;
+    bool          have_best  = false;
+    constexpr uint16_t readings_per_step = (uint16_t)SEARCH_SAMPLES_PER_STEP * RECV_CNT;
+
+    for (uint32_t d = SEARCH_DELAY_MIN_US; d <= SEARCH_DELAY_MAX_US; d += SEARCH_DELAY_STEP_US) {
+        unsigned long sum   = 0;
+        uint16_t      valid = 0;
+
+        //! A zero delay is reserved (the transmitter ignores it), so the 0 us
+        //! step is measured with the smallest delay that is actually applied.
+        const uint16_t delay_sent = d ? (uint16_t)d : 1;
+        for (uint8_t s = 0; s < SEARCH_SAMPLES_PER_STEP; s++) {
+            handleUltrasonics(false, delay_sent);
+            for (uint8_t i = 0; i < RECV_CNT; i++) {
+                if (this_ticks[i] > 0) {
+                    sum += this_ticks[i];
+                    valid++;
+                }
+            }
+        }
+
+        unsigned long avg = valid ? (sum / valid) : 0;
+
+        if (SEARCH_PRINT_STEPS) {
+            Serial.print(F("D: ")); Serial.print((uint16_t)d);
+            Serial.print(F(", "));  Serial.print(avg);
+            Serial.print(F(", "));  Serial.print(valid);
+            Serial.print('/');      Serial.println(readings_per_step);
+        }
+
+        //! More valid readings wins; on a tie the lower mean wins.
+        bool better = !have_best
+                   || valid > best_valid
+                   || (valid == best_valid && valid > 0 && avg < best_avg);
+        if (better) {
+            have_best  = true;
+            best_delay = (uint16_t)d;
+            best_avg   = avg;
+            best_valid = valid;
+        }
+    }
+
+    //! Persist and apply the winner. A zero winner only happens when the sweep
+    //! starts at 0; store the 1 us that was actually sent.
+    if (best_valid > 0) {
+        uint16_t apply = best_delay ? best_delay : 1;
+        if (delayStoreSave(apply)) {
+            burst_delay_us = apply;
+        }
+    }
+
+    Serial.print(F("D: ")); Serial.print(best_delay);
+    Serial.print(F(", "));  Serial.print(best_avg);
+    Serial.print(F(", "));  Serial.print(best_valid);
+    Serial.print('/');      Serial.println(readings_per_step);
+    leds.setPulseTrig(false);
+}
+
+//! 'E' — forget the burst delay stored by 'D' and go back to SONIC_BURST_DELAY,
+//! now and on every later boot.
+//! Output: "E: <delay_us now in force>"
+void onDelayDefault(const CmdArg*) {
+    DEBUG_INFO_PRINTLN("[CMD] Restoring default burst delay");
+    cmdCtrl.pollingState = PollingState::POLLING;
+
+    delayStoreClear();
+    burst_delay_us = SONIC_BURST_DELAY;
+
+    Serial.print(F("E: ")); Serial.println(burst_delay_us);
+}
+
+//! Periodically sends a sync packet to keep the transmitter station's PLL in
+//! phase. A PKT_SYNC carries only the Timer1 value and never changes the burst
+//! delay stored on the transmitter, so it cannot interfere with a measurement.
 void syncPLL(){
-    //! TODO
-    //! Send a 0 to skip the processing/activation of a pin on the transmitter
-    //! NOT YET IMPLEMENTED
-    //! MAY NOT EVER BE IMPLEMENTED...
-    radioCtrl.sendTrigger(TCNT1, 0);
+    radioCtrl.sendSync(TCNT1);
 }
 // ---------------------------------------------------------------------------
 

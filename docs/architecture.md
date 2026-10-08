@@ -32,6 +32,7 @@ a small set of single-purpose modules.
 | LEDs | `led_control.{h,cpp}` | Status LED state, startup animation |
 | Debug | `debug_macros.h` | Compile-time-gated `DEBUG_*` / `DEBUG_INFO_*` printing |
 | Commands | `command_control.{h,cpp}` | Serial line buffering and command dispatch (**base station only**) |
+| Delay store | `delay_store.{h,cpp}` | EEPROM record holding the burst delay found by `D` (**base station only**) |
 
 ### Third-party library
 
@@ -44,7 +45,7 @@ first build.
 ```
    Ground station PC  (UltraGpsXY)
           │  (USB serial, /dev/ttyACM0 @ 38400)
-          │  commands: P / S / C / R    data: "N: t0, ..., t5"
+          │  commands: P / S / C / R / D / E   data: "N: t0, ..., t5"
           ▼
    ┌──────────────────────────────────────────┐
    │            BASE STATION                  │
@@ -77,7 +78,9 @@ first build.
    the base station's current Timer1 count and a µs delay.
 3. The transmitter station's radio raises its IRQ line. `onRadioIRQ()` reads the
    packet and calls `pllCorrect(timer_val - TCNT1)`, nudging the local Timer1 so
-   the two boards stay in phase, and stores the tick delay.
+   the two boards stay in phase, and stores the tick delay. Between measurements
+   the base station keeps the PLL locked with `PKT_SYNC` packets, which carry
+   the same timer value but leave the stored delay alone.
 4. Both boards' Timer1 reach compare-match. Each `TIMER1_COMPA_vect` ISR pulses
    its trigger pin (pin 5) for 50 µs and sets `trigger_fired`. On the
    transmitter that pulse fires the ultrasonic burst, while on the receiver it triggers
@@ -87,6 +90,32 @@ first build.
    some amount of (~60 at the time of writing) ms, recording every change of the six echo lines along with the loop iteration count at which it changed.
 6. The recorded transitions are reduced to one tick count per receiver, and the
    six values are printed over serial as one comma-separated line.
+
+## The burst delay
+
+Every `PKT_TRIGGER` carries `tick_delay`, the number of microseconds the
+transmitter station waits after its own Timer1 compare match before pulsing the
+trigger pin (`delayMicroseconds(tick_delay)` at the top of its ISR). The value
+is stored on the transmitter and stays in force until the next trigger replaces
+it. Two rules keep it from being clobbered:
+
+- PLL corrections travel in their own `PKT_SYNC` packets, which carry only the
+  Timer1 value and never touch `tick_delay`.
+- A `PKT_TRIGGER` with a delay of `0` is dropped by the transmitter without
+  being applied, so a stray or malformed packet cannot clear the delay. The
+  base station never sends one (`sendTrigger()` refuses, and
+  `SONIC_BURST_DELAY` is checked at compile time).
+
+As belt and braces, `handleUltrasonics()` also refuses to send a trigger within
+`TRIGGER_SEND_GUARD_TICKS` of the compare match, so the packet always has a
+near-full cycle to arrive before the pulse that should use it.
+
+The delay sent with each measurement is `burst_delay_us`. On boot it is loaded
+from an EEPROM record written by the `D` command, if one exists and is valid,
+and otherwise set to the compiled-in `SONIC_BURST_DELAY`. `D` sweeps the delay
+(see [Usage](usage.md)), reports the value that gives the lowest mean tick count
+across the receivers, and stores and applies it. `E` clears the record and
+returns to the default.
 
 ## Resetting both boards
 

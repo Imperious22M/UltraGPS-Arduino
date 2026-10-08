@@ -56,15 +56,41 @@ bool RadioController::init(RadioRole role) {
 
 // ---------------------------------------------------------------
 // sendTrigger()
+//
+// tick_delay is the number of microseconds the transmitter station
+// waits after its Timer1 compare match before firing the ultrasonic
+// burst. It is stored on the transmitter and used by every compare
+// match until the next PKT_TRIGGER replaces it; PKT_SYNC packets do
+// not touch it. A value of 0 is reserved: the transmitter station
+// drops a trigger with a zero delay without applying it, so that a
+// stray or malformed packet can never clear the delay in force.
+// Callers must therefore pass at least 1 us. The hardware cap of
+// delayMicroseconds() is 16383 us.
 // ---------------------------------------------------------------
 bool RadioController::sendTrigger(uint16_t timer_val, uint16_t tick_delay) {
     DEBUG_INFO_PRINTF("[TX] Sending trigger with clock value: %u\n", timer_val);
     DEBUG_INFO_PRINTF("[TX] Tick delay: %u\n", tick_delay);
 
+    if (tick_delay == 0) {
+        DEBUG_INFO_PRINTLN("[TX] Trigger with zero delay would be ignored by the transmitter.");
+        return false;
+    }
+
     CommsPacket pkt(PKT_TRIGGER, timer_val, tick_delay);
     bool ok = _writePacket(pkt);
 
     if (!ok) DEBUG_INFO_PRINTLN("[TX] Trigger packet failed.");
+    return ok;
+}
+
+// ---------------------------------------------------------------
+// sendSync()
+// ---------------------------------------------------------------
+bool RadioController::sendSync(uint16_t timer_val) {
+    CommsPacket pkt(PKT_SYNC, timer_val, (uint16_t)0);
+    bool ok = _writePacket(pkt);
+
+    if (!ok) DEBUG_PRINTLN("[TX] Sync packet failed.");
     return ok;
 }
 

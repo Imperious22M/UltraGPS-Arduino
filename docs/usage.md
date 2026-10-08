@@ -37,6 +37,8 @@ silently discarded.
 | `C` | Enter continuous mode — measure and report repeatedly until interrupted | A stream of `C:` lines |
 | `S` | Fire one pulse but report **simulated** counts. Returns to polling mode. | One `N:` line |
 | `R` | Reset the transmitter station over the radio, then reset the base station itself | `N: R` |
+| `D` | Sweep the transmitter's burst delay from 0 to 500 µs, then store and apply the delay with the lowest mean tick count. Returns to polling mode. | One `D:` line (after ~15 s) |
+| `E` | Forget the delay stored by `D` and go back to the compiled-in default | One `E:` line |
 
 !!! note "Line endings matter"
     `CommandControl::poll()` only dispatches a command when it sees `\n` or
@@ -49,6 +51,49 @@ silently discarded.
 There is no dedicated stop command. Send `P` or `S` — both set the polling state
 back to `POLLING`, which ends the stream. `R` ends it too, by resetting the
 board.
+
+### Searching for the best burst delay
+
+Every trigger packet carries a *burst delay*: the number of microseconds the
+transmitter station waits after its Timer1 compare match before firing the
+ultrasonic burst (`SONIC_BURST_DELAY`, 2000 µs by default). `D` sweeps that
+delay from 0 to 500 µs in 10 µs steps, fires three pulses at each step, and
+reports the step whose receivers returned the lowest mean tick count:
+
+```
+D: 120, 3987, 18/18
+```
+
+The fields are the best delay in microseconds, the mean tick count over all
+valid readings at that delay, and how many of the readings were valid (a
+receiver that reports `0` saw no echo and is excluded). A delay of exactly 0 is
+reserved by the radio protocol, so the `0` step is measured with a 1 µs delay. A delay with more valid
+readings always beats one with fewer, so a delay that makes receivers miss the
+burst cannot win by averaging zeros.
+
+The sweep is blocking: 51 steps × 3 pulses at 10 Hz takes about 15 seconds,
+during which no other command is processed. The range, step and sample count
+are the `SEARCH_*` constants in `base-station/src/main.cpp`, and setting
+`SEARCH_PRINT_STEPS` to `true` prints one `D:` line per step so the whole curve
+can be plotted.
+
+**The winner is saved and used.** The best delay is written to the base
+station's EEPROM and becomes the delay sent with every `P`, `C` and `S`
+measurement from then on, including after a reset or power cycle. If no step
+produced a single valid reading, nothing is stored and the delay in force is
+unchanged.
+
+### Restoring the default burst delay
+
+`E` clears the stored value and returns to the compiled-in default,
+`SONIC_BURST_DELAY` (2000 µs). It replies with the delay now in force:
+
+```
+E: 2000
+```
+
+Reflashing the firmware does **not** clear the stored delay; EEPROM survives
+uploads. Send `E` if you want to be sure the default is in use.
 
 ### Resetting the system
 

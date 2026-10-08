@@ -10,6 +10,7 @@ All configuration are **compile-time**, which means that any change in these set
 | `<project>/src/main.cpp` | Baud rate, pin assignments, command table, sampling window, simulation |
 | `<project>/src/timers.cpp` | Pulse rate, trigger pin, trigger pulse width |
 | `<project>/src/command_control.h` | Continuous-mode rate, command buffer limits (base station only) |
+| `base-station/src/delay_store.{h,cpp}` | EEPROM location and accepted range of the stored burst delay |
 | `shared/radio/radio.{h,cpp}` | Radio channel, data rate, power, pipe addresses, packet types (**shared by both boards**) |
 | `<project>/src/debug_macros.h` | Debug output level |
 
@@ -93,7 +94,11 @@ assign the same value to `timer1_top`.
 |---------|------|---------|---------|
 | `triggerPin` | `timers.cpp` (both) | `5` | Pin pulsed by the Timer1 ISR |
 | `TRIGGER_PULSE_US` | `timers.cpp` (both) | `50` | Trigger pulse width. The HC-SR04 datasheet requires 10 µs; 50 µs is a safety margin. |
-| `SONIC_BURST_DELAY` | `main.cpp` (base, inside `handleUltrasonics()`) | `2*1000` | Microseconds the transmitter waits after the packet before firing, giving the receivers time to settle into receive mode |
+| `SONIC_BURST_DELAY` | `main.cpp` (base) | `2*1000` | **Default** microseconds the transmitter waits after its compare match before firing, giving the receivers time to settle into receive mode. Overridden at runtime by a value stored in EEPROM by the `D` command; `E` clears that and returns to this default. |
+| `DELAY_STORE_EEPROM_ADDR` | `delay_store.h` (base) | `0` | First EEPROM byte of the 6-byte stored-delay record (magic, value, inverted value) |
+| `DELAY_STORE_MIN_US` / `MAX_US` | `delay_store.h` (base) | `1` / `16383` | Range a stored delay must fall in to be accepted on boot |
+| `TRIGGER_SEND_GUARD_TICKS` | `main.cpp` (base) | `125` | A trigger packet is not sent within this many Timer1 ticks (2 ms) of the compare match; the handler waits for the next cycle instead, so the transmitter never fires with a stale delay |
+| `tick_delay == 0` | `sendTrigger()` (shared) | reserved | A trigger with a zero delay is refused by the base station and ignored by the transmitter. `SEARCH_DELAY_MIN_US = 0` is therefore measured as 1 µs. |
 | `SYNC_PLL_INTERVAL` | `main.cpp` (base) | `10` | Milliseconds between PLL sync packets |
 | `tick_delay` | `timers.cpp` (transmitter) | set by radio | Applied as `delayMicroseconds()` at the top of the ISR. Hard-capped at 16383 µs by `delayMicroseconds()`. |
 
@@ -144,6 +149,20 @@ Which end of the link a board is comes from the `RadioRole` passed to
 `RadioController::init()` in each `main.cpp`: `RADIO_ROLE_BASE` opens the pipes
 for writing to the transmitter station, `RADIO_ROLE_TRANSMITTER` opens them the
 other way round and starts listening.
+
+The `D` (delay search) command is configured in `base-station/src/main.cpp`:
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `SEARCH_DELAY_MIN_US` | `0` | First burst delay tried |
+| `SEARCH_DELAY_MAX_US` | `500` | Last burst delay tried (inclusive) |
+| `SEARCH_DELAY_STEP_US` | `10` | Step between tries |
+| `SEARCH_SAMPLES_PER_STEP` | `3` | Pulses averaged at each delay |
+| `SEARCH_PRINT_STEPS` | `false` | Print a `D:` line for every step, not only the winner |
+
+The winner is stored in EEPROM and loaded in `setup()`; see
+`base-station/src/delay_store.{h,cpp}`. A blank or corrupted record reads as
+"not set", so a fresh board uses `SONIC_BURST_DELAY`.
 
 The `R` command's own behaviour is set in `base-station/src/main.cpp`:
 

@@ -48,8 +48,9 @@ enum RadioRole : uint8_t {
 // ---------------------------------------------------------------
 enum PacketType : uint8_t {
     PKT_NO_DATA = 1,   //! Used just for initialization
-    PKT_TRIGGER = 2,   //! base -> transmitter: current Timer1 value + tick delay
-    PKT_RESET   = 3    //! base -> transmitter: reset the transmitter station
+    PKT_TRIGGER = 2,   //! base -> transmitter: fire a burst; carries Timer1 value + tick delay (> 0)
+    PKT_RESET   = 3,   //! base -> transmitter: reset the transmitter station
+    PKT_SYNC    = 4    //! base -> transmitter: PLL phase correction only; never touches the tick delay
 };
 
 //! Value carried in CommsPacket::timestamp of a PKT_RESET packet.
@@ -93,8 +94,13 @@ public:
     bool init(RadioRole role);
 
     // --- base station side -------------------------------------
-    //! Send a trigger/sync packet carrying the local Timer1 value.
+    //! Send a measurement trigger carrying the local Timer1 value and the burst
+    //! delay. tick_delay must be > 0; the transmitter station ignores a trigger
+    //! with a zero delay (see sendTrigger() in radio.cpp).
     bool sendTrigger(uint16_t timer_val, uint16_t tick_delay);
+    //! Send a PLL sync packet carrying the local Timer1 value. The transmitter
+    //! station corrects its timer phase from it and leaves its tick delay alone.
+    bool sendSync(uint16_t timer_val);
     //! Send a reset packet (repeated, since the link has no auto-ack).
     //! Returns true if at least one write succeeded.
     bool sendReset(uint8_t repeats = RESET_PACKET_REPEATS);

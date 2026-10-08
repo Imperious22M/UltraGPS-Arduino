@@ -86,10 +86,10 @@ The 8-byte payload is `CommsPacket` (`shared/radio/radio.h`):
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `type` | `PacketType` | `PKT_NO_DATA` (1), `PKT_TRIGGER` (2) or `PKT_RESET` (3) |
+| `type` | `PacketType` | `PKT_NO_DATA` (1), `PKT_TRIGGER` (2), `PKT_RESET` (3) or `PKT_SYNC` (4) |
 | `_pad[3]` | `uint8_t` | Alignment padding to keep the struct at 8 bytes |
 | `timestamp` | `uint16_t` | The base station's `TCNT1` at send time; `RESET_MAGIC` (`0xA55A`) in a reset packet |
-| `tick_delay` | `uint16_t` | Microseconds the transmitter waits before firing |
+| `tick_delay` | `uint16_t` | Microseconds the transmitter waits before firing. Only meaningful in a `PKT_TRIGGER`, where it must be > 0; a zero-delay trigger is ignored |
 
 ## Status LEDs
 

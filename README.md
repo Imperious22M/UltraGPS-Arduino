@@ -139,6 +139,8 @@ pio run -d base-station --target upload
 | `C` | Enter continuous mode — a stream of continous responses `C:` |
 | `S` | Simulates a `P` command and prints **simulated** counts |
 | `R` | Resets the transmitter station over the radio, replies `N: R`, then resets the base station |
+| `D` | Sweeps the burst delay 0–500 µs, prints the best one as a `D:` line, and stores it in EEPROM for future measurements (takes ~15 s) |
+| `E` | Clears the stored burst delay and goes back to the compiled-in default; replies `E: <delay>` |
 
 Commands must be terminated with a newline or carriage return. Any `P`, `S` or `R` command ends
 continuous mode.

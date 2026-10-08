@@ -40,6 +40,8 @@ enum class CommandType : uint8_t {
     SIMULATE,   //! 'S' — run in simulation mode
     CONTINOUS,  //! 'C' — run in continuous mode 
     RESET,      //! 'R' — reset the transmitter station over radio, then this board
+    DELAY_SEARCH, //! 'D' — sweep the burst delay, store and apply the one with the lowest mean tick count
+    DELAY_DEFAULT, //! 'E' — clear the stored burst delay and go back to SONIC_BURST_DELAY
     UNKNOWN,
 };
 

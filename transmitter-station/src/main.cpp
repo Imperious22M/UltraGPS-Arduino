@@ -32,8 +32,12 @@ volatile bool reset_requested = false;
 //
 // Fires on the falling edge of the radio IRQ pin (RX_DR only).
 // Drains the RX FIFO and dispatches on packet type:
-//   PKT_TRIGGER - read the base station's current TCNT1 and apply a
+//   PKT_SYNC    - read the base station's current TCNT1 and apply a
 //                 PLL correction to keep the local timer in phase.
+//                 Leaves tick_delay untouched.
+//   PKT_TRIGGER - same PLL correction, plus store the burst delay used
+//                 by the Timer1 ISR. A trigger with a zero delay is
+//                 dropped entirely so it can never clear the delay.
 //   PKT_RESET   - flag a reboot, performed from loop().
 // ---------------------------------------------------------------
 void onRadioIRQ() {
@@ -45,7 +49,14 @@ void onRadioIRQ() {
     CommsPacket pkt;
     while (radio.receivePacket(pkt)) {
         switch (pkt.type) {
+            case PKT_SYNC:
+                // Correct the local timer phase to match the base station
+                pllCorrect((int16_t)(pkt.timestamp - TCNT1));
+                break;
+
             case PKT_TRIGGER:
+                //! Zero is reserved; ignore the packet rather than clear the delay
+                if (pkt.tick_delay == 0) break;
                 //! tick_delay is declared externally (timers.h)
                 tick_delay = pkt.tick_delay;
                 // Correct the local timer phase to match the base station

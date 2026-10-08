@@ -101,7 +101,7 @@ which.
 ./build.sh monitor -s base
 ```
 
-Then send `P`, `C`, `S`, or `R` — see [Usage](usage.md).
+Then send `P`, `C`, `S`, `R`, `D`, or `E` — see [Usage](usage.md).
 
 ### Building the release artefacts
 
@@ -142,6 +142,7 @@ base-station/
   src/
     main.cpp            setup/loop, command table, echo measurement
     command_control.*   serial line buffering and dispatch
+    delay_store.*       EEPROM record for the burst delay found by 'D'
     timers.*            Timer1 CTC setup, TIMER1_COMPA ISR, PLL correction
     led_control.*       status LEDs
     debug_macros.h      compile-time-gated printing
