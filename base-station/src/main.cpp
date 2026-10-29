@@ -222,6 +222,7 @@ void measure_echo_times(bool noInterruptsFlag = false) {
     //! Base sampling time around TCNT1 values
     uint16_t base_tick = TCNT1;
 
+    //! Sample the echo pins and only save the changes that the echo pins have made.
     for(my_ticks=0; my_ticks < max_tick_val; my_ticks++)
     {
       this_value = echo_value();
@@ -266,19 +267,26 @@ void measure_echo_times(bool noInterruptsFlag = false) {
   DEBUG_PRINTF("Max index value: %u\n", max);
 
   //! Set all values in this_not_used_ticks to 1 and
-  ///! this_ticks to 0
+  //! this_ticks to 0
+  //! This is used to set the arrays to known values 
  for(j=0;j<6;j++) {this_not_used_ticks[j]=1; this_ticks[j]=0;}
 
  //abits = 32+16+8+4+2+1; // 0x3F
  //! Start looking for the ticks
  //! After all the receivers have been triggered
  //! (echo pulled high)
+ //! This finds the start for all the echo lines, which is when all of them are set to high
+ //1 Which indicates the sensor is listening.
  for(i=max+1;i<nwp;i++)
  {
   //! Max value of ticks is 66000*4
+  //! TODO: Change to match the expected max tick value
    if (ticks[i] > 66000*4) break;
    //! Which analog pin was set (value[t-1] - value[t])
    bits = value[i-1]-value[i];
+   //! Find the length in ticks of each echo line, and
+   //! set the this_not_used_ticks to 0 for each echo line that has been found
+   //! to prevent it's tick value from being overriden.
    for(j=0;j<6;j++)
    {
     if ((bits & 1<<j) && (this_not_used_ticks[j]))

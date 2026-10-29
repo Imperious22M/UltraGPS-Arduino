@@ -28,5 +28,4 @@ inline void resetTriggerFlag() {
     trigger_fired = false;
 }
 
-
 #endif
