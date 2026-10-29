@@ -191,7 +191,6 @@ void setup()
 
   //! Radio initialized successfully - keep RADIO_STATUS LED on
   leds.setRadioStatus(true);
-  //Serial.println(F("[SETUP] Ready."));
 
 }
 
@@ -238,6 +237,7 @@ void measure_echo_times(bool noInterruptsFlag = false) {
       }
 
       //! TODO: Move calculations constants out (LIKE TIMER1_TOP*0.8)
+      //! TODO: Review the need for this! (Changing sampling time might be better)
       //! This loop breaks out of the sampling time early if 80% of TCNT1 clock cycles
       //! have passed.
       if((int)(TCNT1 - base_tick)%timer1_top >= (uint16_t)(timer1_top*0.8) ) {
