@@ -24,6 +24,7 @@ CommandControl::CommandControl(RadioController& radio, LedControl& leds,
           { 'E', &_cmdDelayDefault },   // Store the default burst delay (SONIC_BURST_DELAY)
           { 'M', &_cmdSettingsReset },  // Reset every setting stored in EEPROM to its default
           { 'H', &_cmdSamplingTime },   // Set the ultrasonic sampling time in milliseconds
+          { 'F', &_cmdTriggerRate },    // Set the trigger rate in Hz (both stations)
       }
 {
     // Command definitions: { type, number of arguments, argument types, callback }
@@ -40,6 +41,7 @@ CommandControl::CommandControl(RadioController& radio, LedControl& leds,
     _cmdDelayDefault  = { CommandType::DELAY_DEFAULT, 0, {}, &CommandControl::dispatch<&CommandControl::onDelayDefault> };
     _cmdSettingsReset = { CommandType::SETTINGS_RESET, 0, {}, &CommandControl::dispatch<&CommandControl::onResetSettings> };
     _cmdSamplingTime  = { CommandType::SAMPLING_TIME, 1, { ArgType::INT }, &CommandControl::dispatch<&CommandControl::onSetSamplingTime> };
+    _cmdTriggerRate   = { CommandType::TRIGGER_RATE, 1, { ArgType::INT }, &CommandControl::dispatch<&CommandControl::onSetTriggerRate> };
     // Example of a command with an argument
     //_cmdSetDelay    = { CommandType::SET_DELAY, 1, { ArgType::INT }, &CommandControl::dispatch<&CommandControl::onSetDelay> };
 }
@@ -282,7 +284,7 @@ void CommandControl::onResetSettings(const CmdArg*) {
     Serial.flush();
 
     _settings.resetToDefaults();
-    _sampler.applySettings(_settings);
+    applyTriggerRate();   // also re-applies the sampling settings
 }
 
 // 'H <ms>' — set the ultrasonic sampling time
@@ -297,5 +299,37 @@ void CommandControl::onSetSamplingTime(const CmdArg* args) {
     }
 
     Serial.print(F("H: ")); Serial.print(_sampler.getSamplingTimeMs());
-    Serial.print(F(", "));  Serial.println(_sampler.getMaxTicks());
+    Serial.print(F(", "));  Serial.println(_sampler.getSamplingCounts());
+}
+
+// 'F <Hz>' — set the trigger rate on both stations
+void CommandControl::onSetTriggerRate(const CmdArg* args) {
+    DEBUG_INFO_PRINTLN("[CMD] Set trigger rate");
+    pollingState = PollingState::POLLING;
+
+    const int32_t hz = args[0].i;
+    if (hz >= TRIGGER_RATE_MIN_HZ && hz <= TRIGGER_RATE_MAX_HZ
+        && _settings.setTriggerRateHz((uint8_t)hz)) {
+        applyTriggerRate();
+        // A new rate sets the stored sampling time to the longest it can be:
+        // 80 % of the new Timer1 period ('H' can shorten it afterwards)
+        _settings.setSamplingTimeMs(_sampler.maxSamplingTimeMs());
+        _sampler.applySettings(_settings);
+    }
+
+    Serial.print(F("F: ")); Serial.print(_settings.getTriggerRateHz());
+    Serial.print(F(", "));  Serial.print(timer1_top);
+    Serial.print(F(", "));  Serial.println(_sampler.getSamplingTimeMs());
+}
+
+void CommandControl::applyTriggerRate() {
+    const uint16_t top = triggerRateToTop(_settings.getTriggerRateHz());
+    if (top != timer1_top) {
+        timer1_init(top);
+    }
+    // Always tell the transmitter; it ignores a TOP it already has
+    const bool sent = _radio.sendRate(top);
+    _leds.setPulseTrig(sent);
+    _sampler.applySettings(_settings);   // re-cap the sampling time to the new period
+    _leds.setPulseTrig(false);
 }

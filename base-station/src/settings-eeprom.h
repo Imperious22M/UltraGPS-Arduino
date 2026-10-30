@@ -24,6 +24,7 @@
 
 #pragma once
 #include <Arduino.h>
+#include "radio.h"   // TRIGGER_RATE_HZ / _MIN_HZ / _MAX_HZ, shared with the transmitter station
 
 // ---------------------------------------------------------------------------
 // Default values
@@ -189,7 +190,7 @@ constexpr int SETTINGS_EEPROM_ADDR = 0;
 //!
 //! Change it whenever the stored fields change; a board holding a record with a
 //! different version rewrites it with the defaults on its next boot.
-constexpr uint8_t SETTINGS_LAYOUT_VERSION = 1;
+constexpr uint8_t SETTINGS_LAYOUT_VERSION = 2;  // 2: trigger rate added
 
 //! @brief Check whether @p baud is a baud rate SettingsEeprom::setBaudRate() accepts.
 //!
@@ -365,6 +366,9 @@ public:
     //! @return The transition limit.
     //! @see MAX_SAVED_TICKS
     uint8_t       getMaxSavedTicks() const;
+    //! @brief Get the trigger rate (Timer1 frequency) in Hz.
+    //! @return TRIGGER_RATE_MIN_HZ to TRIGGER_RATE_MAX_HZ. @see TRIGGER_RATE_HZ
+    uint8_t       getTriggerRateHz() const;
 
     //! @}
 
@@ -478,6 +482,12 @@ public:
     //! @note UltrasonicSampling keeps its own copy; call
     //!       UltrasonicSampling::applySettings() afterwards.
     bool setMaxSavedTicks(uint8_t count);
+    //! @brief Set the trigger rate (the 'F' command). Range TRIGGER_RATE_MIN_HZ to
+    //!        TRIGGER_RATE_MAX_HZ.
+    //! @note Only stores it: the caller restarts Timer1 and tells the transmitter.
+    //! @param hz Trigger rate in Hz.
+    //! @return true if stored; false, and nothing changes, if out of range.
+    bool setTriggerRateHz(uint8_t hz);
 
     //! @}
 
@@ -517,6 +527,7 @@ private:
         uint16_t resetSelfDelayMs;           //!< Default: RESET_SELF_DELAY_MS.
         uint16_t samplingTimeMs;             //!< Default: SAMPLING_TIME_MS.
         uint8_t  maxSavedTicks;              //!< Default: MAX_SAVED_TICKS.
+        uint8_t  triggerRateHz;              //!< Default: TRIGGER_RATE_HZ.
     };
 
     static_assert(sizeof(Data) <= 255, "the record header stores the settings size in one byte");

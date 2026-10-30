@@ -28,8 +28,8 @@ arduino-cli upload -p /dev/ttyACM1 -b arduino:avr:uno \
 
 Take care to send each image to the right board — see
 [Uploading](uploading.md) for how to tell them apart. The base station keeps its
-settings in EEPROM, which flashing does not erase; its burst delay and sampling
-time can be changed over serial, and `M` restores the defaults (see
+settings in EEPROM, which flashing does not erase; its burst delay, sampling
+time and trigger rate can be changed over serial, and `M` restores the defaults (see
 [Usage](usage.md)). Changing any other setting requires building from source
 (and, for a base-station setting, sending `M` after flashing) — see
 [Configuration](configuration.md).

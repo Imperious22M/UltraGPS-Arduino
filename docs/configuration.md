@@ -15,9 +15,11 @@ takes effect once the firmware is rebuilt and re-uploaded to the board.
 |------|----------|
 | `<project>/platformio.ini` | Board, serial ports, monitor baud, libraries |
 | `<project>/src/main.cpp` | Radio and LED pin assignments; the baud rate (transmitter station only) |
-| `<project>/src/timers.cpp` | Pulse rate, trigger pin, trigger pulse width |
+| `<project>/src/timers.cpp` | `timer1_init(top)`, trigger pin, trigger pulse width |
+| `shared/radio/radio.h` | Trigger rate range and default (`TRIGGER_RATE_MIN_HZ`, `TRIGGER_RATE_MAX_HZ`, `TRIGGER_RATE_HZ`), `triggerRateToTop()` |
 | `base-station/src/settings-eeprom.h` | Defaults and accepted ranges of the settings stored in EEPROM (baud rate, echo pins, burst delay, sync interval, delay search, `R` behaviour, sampling time and more), transition buffer size, EEPROM address and layout version of the stored record |
-| `base-station/src/ultrasonic-sampling.h` | `SAMPLING_LOOP_CYCLES`, which converts the sampling time to ticks |
+| `base-station/src/ultrasonic-sampling.h` | `SAMPLING_WINDOW_MAX_PERCENT` (80 %), `TIMER1_US_PER_COUNT` (16 µs) |
+| `transmitter-station/src/main.cpp` | EEPROM record of the trigger rate received from the base station |
 | `base-station/src/command_handler.h` | Command buffer limits, continuous-mode rate |
 | `base-station/src/command_control.{h,cpp}` | Command list and letter table, `SIMULATE_REAL_COMMANDS` |
 | `shared/radio/radio.{h,cpp}` | Radio channel, data rate, power, pipe addresses, packet types (**shared by both boards**) |
@@ -53,7 +55,8 @@ range fails to compile.
 | `SEARCH_PRINT_STEPS` | `true` | `true` / `false` | — |
 | `RESET_SELF_AFTER_REMOTE_RESET` | `false` | `true` / `false` | — |
 | `RESET_SELF_DELAY_MS` | `100` ms | any (0–65535 ms) | — |
-| `SAMPLING_TIME_MS` | `80` ms | 1 ms – 80 % of the trigger period | `H <ms>` |
+| `SAMPLING_TIME_MS` | `80` ms | 1 ms – 80 % of the Timer1 period at the current rate | `H <ms>` |
+| `triggerRateHz` (default `TRIGGER_RATE_HZ`) | `10` Hz | 1–50 Hz | `F <Hz>` |
 | `MAX_SAVED_TICKS` | `100` | 1–`SAMPLE_BUFFER_SIZE` (100) | — |
 | `TRIGGER_HIGH_DURATION` | `300` µs | 1–16383 µs | — |
 
@@ -96,11 +99,11 @@ value does not wear the EEPROM.
     until either:
 
     - `M` is sent, which writes every default back and applies it at once; or
-    - `SETTINGS_LAYOUT_VERSION` (currently `1`) is changed, so the next boot
+    - `SETTINGS_LAYOUT_VERSION` (currently `2`; it became 2 when the trigger rate was added, so boards running older firmware rewrite their defaults on the first boot) is changed, so the next boot
       finds a record of another version and writes the defaults.
 
     Both reset **every** setting, including a burst delay found by `D` and a
-    sampling time set with `H`. Change `SETTINGS_LAYOUT_VERSION` whenever the
+    sampling time set with `H` and a rate set with `F`. Change `SETTINGS_LAYOUT_VERSION` whenever the
     stored fields change.
 
 ### Baud rates
@@ -138,7 +141,7 @@ upload_port = /dev/ttyACM0
 
 | Key | Default (base / transmitter) | Notes |
 |-----|------------------------------|-------|
-| `board` | `uno` | Change for a different AVR board. The `PINC` reads, Timer1 values, `SAMPLING_LOOP_CYCLES` and the accepted baud rates assume an ATmega328P at 16 MHz. |
+| `board` | `uno` | Change for a different AVR board. The `PINC` reads, Timer1 values, the 16 µs Timer1 count and the accepted baud rates assume an ATmega328P at 16 MHz. |
 | `lib_deps` | `nRF24/RF24` | Downloaded on first build |
 | `lib_extra_dirs` | `../shared` | Compiles the `shared/` libraries (radio layer, software reset) into the project |
 | `build_flags` | `-I src` | Lets the shared radio code include the project's own `debug_macros.h` |
@@ -170,37 +173,47 @@ two ways recover a board that comes up at a rate the host does not use.
 
 ## Pulse rate
 
-Both boards call a `timer1_init_*()` function from `setup()`. `timers.cpp`
-provides four; the default on both is 10 Hz:
+The trigger (pulse) rate is a **runtime setting**. `F <Hz>` (`F 20` or `F20`)
+accepts 1–50 Hz (`TRIGGER_RATE_MIN_HZ` to `TRIGGER_RATE_MAX_HZ` in
+`shared/radio/radio.h`; default `TRIGGER_RATE_HZ` = 10). The base station:
 
-```cpp
-timer1_init_10Hz();   // in setup(), base-station and transmitter-station
-```
+1. stores the rate in EEPROM (`triggerRateHz`);
+2. restarts its Timer1 with `timer1_init(top)`, `top = round(62500 / Hz) - 1`
+   (`triggerRateToTop()`);
+3. sends a `PKT_RATE` packet (three copies) carrying that TOP to the
+   transmitter station;
+4. caps the sampling time at 80 % of the new period (see
+   [Sampling window](#sampling-window)).
 
-| Function | Rate | `OCR1A value` |
-|----------|------|---------|
-| `timer1_init_5Hz()` | 5 Hz | 12498 |
-| `timer1_init_10Hz()` | 10 Hz | 6249 |
-| `timer1_init_15Hz()` | ≈ 14.999 Hz | 4166 |
-| `timer1_init_20Hz()` | 20 Hz | 3124 |
+It replies `F: <Hz>, <TOP>, <sampling ms in force>`, e.g. `F: 20, 3124, 40`. An
+out-of-range value changes nothing and the reply shows the values still in
+force. `M` re-applies the default rate and sends it as well, and the base
+station sends its rate once at every boot.
 
-**Change this on both boards.** The PLL corrects phase, not frequency — if the
-boards run at different rates the transmitter is yanked back into phase every
-packet and the timing is unusable.
+| Rate | Timer1 TOP (`OCR1A`) | Period | Sampling cap (80 %) |
+|------|----------------------|--------|---------------------|
+| 1 Hz | 62499 | 1000 ms | 800 ms |
+| 5 Hz | 12499 | 200 ms | 160 ms |
+| 10 Hz (default) | 6249 | 100 ms | 80 ms |
+| 20 Hz | 3124 | 50 ms | 40 ms |
+| 50 Hz | 1249 | 20 ms | 16 ms |
 
-All four use CTC mode with a prescaler of 256, so one Timer1 tick is 16 µs. To
-add a rate, copy one of the functions and set `OCR1A = 16000000 / 256 / f - 1`,
-then assign the same value to `timer1_top`.
+Timer1 runs in CTC mode with a prescaler of 256, so one Timer1 count is 16 µs.
+
+The transmitter station accepts a `PKT_RATE` only if its check field holds the
+inverted TOP and the TOP is in range. If the TOP differs from its own it stores
+it in its EEPROM (address 0: magic `0x7A7E`, TOP, ~TOP) and resets itself
+through the watchdog; at boot it starts Timer1 with the stored TOP, or 10 Hz if
+there is no valid record. EEPROM survives reflashing on this board too.
+
+!!! warning "Reflash both boards together"
+    Firmware older than this change does not know `PKT_RATE` or `timer1_init(top)`.
+    An old transmitter ignores `F` and stays at 10 Hz. The PLL corrects phase,
+    not frequency, so boards at different rates give unusable timing.
 
 !!! note "Faster is not always better"
-    The sampling window is a fixed time (`SAMPLING_TIME_MS`, 80 ms by default),
-    not a share of the Timer1 period, and it must stay shorter than the trigger
-    period (see [Sampling window](#sampling-window)). 80 ms fits 5 Hz and
-    10 Hz; at 15 Hz (66.7 ms period) and 20 Hz (50 ms) set a shorter window
-    with `H`. 80 % of the period gives the window older firmware used at that
-    rate, e.g. `H 40` at 20 Hz. A shorter window also reduces the maximum
-    measurable range. `M` brings back the default, so change `SAMPLING_TIME_MS`
-    too if the new rate is there to stay.
+    The sampling window is capped at 80 % of the period, so a faster rate also
+    shortens the maximum measurable range (40 ms at 20 Hz).
 
 ## Trigger timing
 
@@ -222,79 +235,45 @@ default, and the board uses the value stored on it.
 
 After each trigger, `UltrasonicSampling::measureEchoTimes()`
 (`base-station/src/ultrasonic-sampling.cpp`) samples the echo lines in a tight
-loop. One pass of that loop is one **tick**, the unit of the printed counts.
+loop. One pass of that loop is one **tick**, the unit of the printed counts, as
+in the original firmware.
 
-How long it samples is the `SAMPLING_TIME_MS` setting: **80 ms** by default,
-1 ms up to 80 % of the trigger period (80 ms at 10 Hz), stored in EEPROM. `H <ms>` (`H 60` or `H60`) changes it at runtime,
-stores it, and replies with the time now in force and the matching number of
-ticks; an out-of-range value changes nothing (see [Usage](usage.md)):
-
-```
-H: 80, 71111
-```
-
-The time is converted to a maximum number of ticks:
+How long it samples is bounded by Timer1, not by the tick count. The loop reads
+`TCNT1` when it starts and, on every pass, computes how many Timer1 counts have
+elapsed (adding one period when `TCNT1` wrapped at the compare match). It stops
+once that reaches the limit, computed once before the loop:
 
 ```
-ticks = ms * (F_CPU / 1000) / SAMPLING_LOOP_CYCLES = ms * 16000 / 18
+limit = min(msToCounts(SAMPLING_TIME_MS), 80 % of (timer1_top + 1))
+msToCounts(ms) = ms * 1000 / 16
 ```
 
-| Sampling time | Ticks |
-|---------------|-------|
-| 1 ms | 888 |
-| 80 ms (default) | 71111 |
+`SAMPLING_TIME_MS` is **80 ms** by default and accepts 1 ms up to
+`maxSamplingTimeMs()`: 80 % (`SAMPLING_WINDOW_MAX_PERCENT`) of the Timer1 period
+at the current trigger rate, never above `SAMPLING_TIME_MAX_MS` (1000 ms).
 
-`SAMPLING_LOOP_CYCLES` (`ultrasonic-sampling.h`) is the number of CPU cycles one
-pass takes when no echo line changes: **18**, counted from the compiled code
-(avr-gcc 7.3.0, `-Os`, LTO). One tick is therefore **1.125 µs**. The window is
-approximate: a pass that saves a transition takes 44 cycles (26 of them not
-counted), interrupts stay enabled while sampling (the `millis()` interrupt alone
-stretches real time by about 0.6 %), and the Uno's ceramic resonator is not an
-exact 16 MHz.
+| Rate | Maximum sampling time |
+|------|-----------------------|
+| 1 Hz | 800 ms |
+| 10 Hz | 80 ms |
+| 20 Hz | 40 ms |
 
-!!! warning "Counts are about 26 times larger than with earlier firmware"
-    Earlier firmware recomputed the TCNT1 cut-off (below) on every pass, with a
-    16-bit modulo and a float multiply: about 470 CPU cycles, so a tick was
-    about 29 µs. A tick is now 1.125 µs, the same distance gives a count about
-    26 times larger, and any calibration (`A` and `B` in `Ax + B`) must be
-    redone.
+`H <ms>` (`H 60` or `H60`) changes it at runtime, stores it, and replies with the
+time now in force and the matching number of Timer1 counts; an out-of-range
+value changes nothing (see [Usage](usage.md)):
 
-!!! note "Keep the window shorter than the trigger period"
-    Sampling starts right after the Timer1 compare match. A window longer than
-    the trigger period (100 ms at 10 Hz, 50 ms at 20 Hz) runs into the next
-    trigger pulse, which re-arms the receivers mid-measurement, so the reported
-    ticks come from a later cycle or are 0. The default 80 ms is the window
-    earlier firmware actually used at 10 Hz, where its TCNT1 cut-off stopped
-    sampling at 80 % of the 100 ms period.
-
-### TCNT1 cut-off (disabled)
-
-The 80 % cut-off is still in `measureEchoTimes()` but commented out, so the
-sampling time alone bounds the loop. The cut-off scaled with the trigger period;
-the sampling time does not. Uncommenting it restores the old behaviour but adds
-several hundred cycles to every pass, so `SAMPLING_LOOP_CYCLES` must then be
-re-counted.
-
-### Re-counting the loop cycles
-
-`SAMPLING_LOOP_CYCLES` depends on how the compiler allocates registers in
-`measureEchoTimes()`. Re-count it whenever that function, the compiler or the
-build flags change: disassemble the firmware, find the `in rX, 0x06` (the `PINC`
-read) in `measureEchoTimes()`, and add up the cycles of the loop path around it
-as in the table in `ultrasonic-sampling.h`.
-
-```bash
-~/.platformio/packages/toolchain-atmelavr/bin/avr-objdump -d -C \
-    base-station/.pio/build/uno/firmware.elf
+```
+H: 80, 5000
 ```
 
-`measureEchoTimes()` is marked
-`__attribute__((noinline, noclone, externally_visible))`, so link-time
-optimisation cannot inline, clone or specialise it and its loop compiles the
-same way whatever calls it. Defining `DEBUG` does change it: with avr-gcc 7.3.0
-a pass then takes 30 cycles (63 with a transition), so `SAMPLING_LOOP_CYCLES`
-is 30 in a `DEBUG` build (`#ifdef DEBUG`): the window still matches the set
-time, but a tick is 1.875 µs.
+`F` sets the stored sampling time to the cap of the new rate (`H` can shorten
+it afterwards); a stored time above the cap is clamped at boot. A window can therefore never
+run into the next trigger pulse.
+
+!!! warning "Check the calibration"
+    Ticks are now Timer1 counts (16 µs each), not loop iterations (about 29 µs
+    each in the original firmware). Redo any calibration (`A` and `B` in `Ax + B`)
+    against known distances after reflashing.
 
 ### Transition buffers
 
@@ -427,9 +406,7 @@ and `C` and you do not want to modify it.
 
 Simulated values come from `UltrasonicSampling::simulateEchoTimes()`: a base of
 `401` counts with a ±50 deterministic variation per receiver that shifts on each
-call. They were not rescaled for the 1.125 µs tick (see
-[Sampling window](#sampling-window)), so they are now much smaller than real
-readings.
+call.
 
 ```cpp
 constexpr unsigned long BASE_COUNT = 401;

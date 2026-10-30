@@ -11,6 +11,9 @@ extern volatile bool trigger_fired;
 extern uint16_t timer1_top; 
 extern uint16_t tick_delay; 
 
+//! @brief Start Timer1 (CTC, prescaler 256) with the given TOP; see timers.cpp.
+//! @param top Value for OCR1A; the period is (top + 1) x 16 us.
+void timer1_init(uint16_t top);
 // Function prototypes
 void timer1_init_10Hz();
 void timer1_init_5Hz();

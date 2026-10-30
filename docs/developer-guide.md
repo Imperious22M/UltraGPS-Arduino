@@ -104,7 +104,7 @@ which.
 ./build.sh monitor -s base
 ```
 
-Then send `P`, `C`, `S`, `R`, `D`, `E`, `H <ms>` or `M` — see [Usage](usage.md).
+Then send `P`, `C`, `S`, `R`, `D`, `E`, `H <ms>`, `F <Hz>` or `M` — see [Usage](usage.md).
 
 ### Building the release artefacts
 
@@ -187,10 +187,11 @@ and RAM together, and are only called by commands.
   `SETTINGS_LAYOUT_VERSION` is changed.
 - Change `SETTINGS_LAYOUT_VERSION` whenever the stored fields change; a board
   holding a record with another version rewrites it with the defaults on its
-  next boot.
+  next boot. It is `2` since the trigger rate was added.
 - `UltrasonicSampling` keeps its own copy of the sampling time, echo pins and
   transition cap. After changing one of those settings, call
-  `sampler.applySettings(settings)`, as `H` and `M` do.
+  `sampler.applySettings(settings)`, as `H`, `F` and `M` do (it also clamps the
+  sampling time to 80 % of the current Timer1 period).
 - `setBaudRate()` switches the serial port at once, and the stored rate is used
   on every boot. No command calls it yet; if one ever stores a rate the host
   does not use, recover by connecting at that rate and sending `M`, or by
@@ -219,22 +220,32 @@ Then add the command to the tables in `README.md` and [Usage](usage.md).
 
 ### Sampling-loop timing
 
-A tick is one iteration of the sampling loop in
-`UltrasonicSampling::measureEchoTimes()`. The sampling time is converted to a
-tick limit with `SAMPLING_LOOP_CYCLES` in `ultrasonic-sampling.h`: 18 CPU cycles
-per iteration, so one tick is 1.125 µs. That number was counted from the
-compiled loop (avr-gcc 7.3.0, `-Os`, LTO), so **re-count it whenever
-`measureEchoTimes()`, the compiler or the build flags change** — the comment
-above the constant shows how, with `avr-objdump`. Keep the function's
-`__attribute__((noinline, noclone, externally_visible))`: it stops link-time
-optimisation from compiling the loop differently for different callers.
-Un-commenting the TCNT1 timeout in the loop would add several hundred cycles per
-iteration.
+A tick is one Timer1 count (16 µs): every echo-line change seen by the sampling
+loop in `UltrasonicSampling::measureEchoTimes()` is timestamped with the `TCNT1`
+counts elapsed since sampling started, so results do not depend on how fast the
+loop runs. The loop
+is bounded by Timer1: it reads `TCNT1` once at the start and, on every pass,
+computes the Timer1 counts elapsed since then (adding one period if `TCNT1`
+wrapped at the compare match). It stops once that reaches a limit computed
+before the loop, the smaller of the sampling time in Timer1 counts
+(`msToCounts(ms) = ms × 1000 / 16`) and 80 % (`SAMPLING_WINDOW_MAX_PERCENT`) of
+`timer1_top + 1`. Keep that limit computation out of the loop; the original
+firmware recomputed it with a modulo and a float multiply on every pass.
 
-The conversion is approximate: each saved transition adds 26 uncounted cycles,
-interrupts stay enabled while sampling (the `millis()` interrupt alone stretches
-real time by about 0.6 %), and the Uno's ceramic resonator is not exactly
-16 MHz.
+The duration of one tick depends on how the loop compiles and is not specified
+anywhere, so check the downstream calibration after changing
+`measureEchoTimes()`, the compiler or the build flags.
+
+### Trigger rate
+
+`F` changes the Timer1 period at runtime. `triggerRateToTop()` and
+`timer1TopIsValid()` in `shared/radio/radio.h` convert and check it, and both
+stations start Timer1 with `timer1_init(top)` (`timers.cpp`); there are no
+per-rate `timer1_init_*Hz()` functions to edit any more. The base station sends
+the TOP in a `PKT_RATE` packet; the transmitter stores it in its EEPROM record
+(address 0, magic `0x7A7E`, TOP, ~TOP, in `transmitter-station/src/main.cpp`)
+and resets through the watchdog. Both boards must be flashed with firmware that
+knows `PKT_RATE`.
 
 ### Debugging
 
@@ -244,9 +255,7 @@ with the measurement output, so anything parsing that output will choke — see
 [Configuration](configuration.md).
 
 On the base station, `DEBUG` also adds prints to `measureEchoTimes()`, which
-changes how its loop compiles: 30 cycles per iteration instead of 18.
-`SAMPLING_LOOP_CYCLES` follows (`#ifdef DEBUG` in `ultrasonic-sampling.h`), so
-the sampling window still matches the set time, but a tick is 1.875 µs and
+changes how its loop compiles. The window is still bounded by Timer1, but
 `DEBUG` tick counts are not comparable with a normal build's — see
 [Sampling-loop timing](#sampling-loop-timing).
 

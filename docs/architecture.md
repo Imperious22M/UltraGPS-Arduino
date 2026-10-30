@@ -60,7 +60,8 @@ first build.
    └────────┬─────────────────────────────────┘
             │ nRF24 CommsPacket    ▲ echoes on A0–A5
             │ (TCNT1, tick_delay)  │
-            │ or PKT_RESET         │
+            │ PKT_SYNC, PKT_RESET, │
+            │ PKT_RATE             │
             ▼                      │
    ┌────────────────────┐          │
    │ TRANSMITTER STATION│          │
@@ -98,9 +99,9 @@ first build.
    `UltrasonicSampling::measureEchoTimes()`. It reads all the echo lines at
    once (`PINC`, masked to the receivers' echo pins) in a tight loop for the
    sampling time (default 80 ms, set with `H`), recording every change of the
-   echo lines along with the loop iteration count (the *tick*) at which it
-   changed. One iteration takes 18 CPU cycles, so a tick is 1.125 µs and 80 ms
-   is 71111 ticks. Sampling stops early once the transition cap
+   echo lines along with the Timer1 counts elapsed since sampling started
+   (the *tick*, 16 µs each) at which it changed. The window is timed with `TCNT1` and never exceeds 80 % of the
+   Timer1 period. Sampling stops early once the transition cap
    (`MAX_SAVED_TICKS`, 100 by default) is reached.
 6. The recorded transitions are reduced to one tick count per receiver (the
    tick at which its echo line fell after all the lines were high, or `0` if it
@@ -197,44 +198,50 @@ watchdog that a software reset leaves running.
 ## Timing model
 
 Everything is driven by **Timer1 in CTC mode with a prescaler of 256**, so one
-timer tick is 16 µs. `timers.cpp` provides four rates:
+Timer1 count is 16 µs. Both boards start it with `timer1_init(top)`; the TOP
+comes from the trigger rate, `top = round(62500 / Hz) - 1`
+(`triggerRateToTop()` in `shared/radio/radio.h`):
 
-| Function | `OCR1A` | Rate |
-|----------|---------|------|
-| `timer1_init_5Hz()` | 12498 | 5 Hz |
-| `timer1_init_10Hz()` | 6249 | 10 Hz (default on both boards) |
-| `timer1_init_15Hz()` | 4166 | ≈ 14.999 Hz |
-| `timer1_init_20Hz()` | 3124 | 20 Hz |
+| Rate | `OCR1A` (TOP) |
+|------|---------------|
+| 1 Hz | 62499 |
+| 5 Hz | 12499 |
+| 10 Hz (default) | 6249 |
+| 20 Hz | 3124 |
+| 50 Hz | 1249 |
+
+The rate is a runtime setting (`F <Hz>`, 1–50 Hz), not a function to pick in
+`setup()`. The base station stores it in its EEPROM settings and sends it in a
+`PKT_RATE` packet (type 5; `timestamp` = TOP, `tick_delay` = ~TOP as a check;
+sent three times) after `F`, after `M` and once at every boot. The transmitter
+station accepts the packet only if the check matches and the TOP is in range;
+if the TOP differs from its own, it stores it in its EEPROM (address 0: magic
+`0x7A7E`, TOP, ~TOP) and resets through the watchdog, then starts Timer1 with
+the stored TOP (10 Hz if there is none). Both boards must run firmware that
+knows `PKT_RATE`, so reflash them together.
 
 The two boards free-run at the same nominal rate; the radio packet is what keeps
 them aligned. Because the packet carries the base station's raw `TCNT1`, the
 transmitter can compute its phase error directly and add it to its own `TCNT1` —
 a one-step software PLL, implemented as `pllCorrect()` in `timers.h`.
 
-The base station's sampling window opens at its own compare match and lasts the
-sampling time. Keep that shorter than the trigger period (100 ms at 10 Hz,
-50 ms at 20 Hz): a longer window runs into the next trigger pulse, which re-arms
-the receivers mid-measurement, so the reported ticks come from a later cycle or
-are `0`. The TCNT1 cut-off that used to end sampling at 80 % of the period is
-commented out, so the window no longer shrinks when the rate goes up; lower the
-sampling time with `H` when raising the rate.
+The base station's sampling window opens at its own compare match. As in the
+original firmware it is bounded by `TCNT1`: `measureEchoTimes()` reads `TCNT1`
+at the start, and on each pass computes the elapsed Timer1 counts (adding one
+period if `TCNT1` wrapped) and stops once they reach the limit computed before
+the loop, the smaller of the sampling time in counts and 80 % of
+`timer1_top + 1`. The window therefore never runs into the next trigger pulse,
+and `H` accepts at most 80 % of the period (80 ms at 10 Hz, 40 ms at 20 Hz).
 
-!!! note "Ticks are not the same as Timer1 counts"
-    The values printed over serial are **loop iterations** of the sampling loop
-    in `UltrasonicSampling::measureEchoTimes()`, not Timer1 ticks. One iteration
-    takes `SAMPLING_LOOP_CYCLES` = 18 CPU cycles, so a tick is 1.125 µs at
-    16 MHz. That is nominal: each saved transition adds 26 cycles that are not
-    counted, interrupts stay enabled (the `millis()` interrupt alone stretches
-    real time by about 0.6 %), and the Uno's ceramic resonator is not an exact
-    16 MHz. The counts carry an `Ax + B` type relationship to distance: `A`
-    converts counts to time/distance and `B` absorbs the fact that counting does
-    not begin exactly at zero. Calibration is done downstream, not on the
-    Arduino.
-
-    Before the sampling time became a setting, the loop recomputed the TCNT1
-    cut-off on every pass and a tick was about 29 µs. Counts for the same
-    distance are now about 26× larger, so **any existing `A` and `B` must be
-    recalibrated**.
+!!! note "Ticks are Timer1 counts"
+    The values printed over serial are **Timer1 counts** (16 µs each) elapsed
+    between the start of sampling and each receiver's echo falling, so they do
+    not depend on how fast the sampling loop runs. (The original firmware
+    printed loop iterations, about 29 µs each.) The counts carry an `Ax + B`
+    type relationship to distance: `A` converts counts to time/distance and `B`
+    absorbs the fact that counting does not begin exactly at zero. Calibration
+    is done downstream, not on the Arduino; check it against known distances
+    after reflashing.
 
 ## Logging
 
@@ -245,8 +252,7 @@ Serial printing is gated at compile time by two macros in `debug_macros.h`:
   received, trigger fired, packet failures).
 - **`DEBUG`** — activates both `DEBUG_INFO_*` and the verbose `DEBUG_*` macros
   (radio init progress, tick counts, `PINC` values, sampling diagnostics). It
-  also changes how the sampling loop compiles (30 CPU cycles per tick instead
-  of 18), so tick counts from a `DEBUG` build are not comparable with a normal
+  also changes how the sampling loop compiles, so tick counts from a `DEBUG` build are not comparable with a normal
   build's.
 
 Neither is defined by default, so both sets compile away to nothing. Plain

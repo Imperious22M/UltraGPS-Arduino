@@ -37,6 +37,7 @@ enum class CommandType : uint8_t {
     DELAY_DEFAULT,  //!< 'E' — store SONIC_BURST_DELAY as the burst delay (replacing a 'D' result).
     SETTINGS_RESET, //!< 'M' — reset every setting stored in EEPROM to its default.
     SAMPLING_TIME,  //!< 'H' — set the ultrasonic sampling time in milliseconds.
+    TRIGGER_RATE,   //!< 'F' — set the trigger rate (Timer1 frequency) in Hz, on both stations.
     UNKNOWN,        //!< Not a command; no command definition uses it.
 };
 
@@ -71,7 +72,7 @@ public:
 
 private:
     //! Number of entries in _cmdTable (a 9th initializer fails to compile).
-    static constexpr uint8_t CMD_COUNT = 8;
+    static constexpr uint8_t CMD_COUNT = 9;
 
     RadioController&    _radio;     //!< Radio link to the transmitter station.
     LedControl&         _leds;      //!< Status LEDs.
@@ -90,6 +91,7 @@ private:
     CommandDef _cmdDelayDefault;   //!< The 'E' command.
     CommandDef _cmdSettingsReset;  //!< The 'M' command.
     CommandDef _cmdSamplingTime;   //!< The 'H' command.
+    CommandDef _cmdTriggerRate;    //!< The 'F' command.
 
     //! @}
 
@@ -268,21 +270,36 @@ private:
     //!
     //! Sent as `H <ms>` (`H80` works too), with `<ms>` from SAMPLING_TIME_MIN_MS
     //! to UltrasonicSampling::maxSamplingTimeMs(), i.e. 1 ms to 80 % of the trigger period (80 ms at 10 Hz, 40 ms at 20 Hz). The milliseconds are converted
-    //! to a maximum number of sampling-loop iterations (ticks), see
-    //! UltrasonicSampling::msToTicks(). A value out of range changes nothing (the
+    //! to Timer1 counts (16 us each), see UltrasonicSampling::msToCounts();
+    //! sampling stops once TCNT1 has advanced that far. A value out of range changes nothing (the
     //! reply then shows the sampling time still in force). The argument must be
     //! an integer: a missing or non-numeric one is rejected by the decoder and,
     //! like any invalid line, gets no reply.
-    //! @warning Sampling starts right after the trigger pulse, so a window longer
-    //!          than the trigger period (100 ms at 10 Hz) runs into the next
-    //!          trigger pulse, and its readings are not meaningful.
     //! @param args `args[0].i` is the sampling time in milliseconds.
     //! @par Reply
     //! @code
-    //! H: <sampling time in force (ms)>, <maximum ticks>
+    //! H: <sampling time in force (ms)>, <Timer1 counts>
     //! @endcode
-    //! For example `H: 80, 71111` for the default 80 ms.
+    //! For example `H: 80, 5000` for the default 80 ms.
     void onSetSamplingTime(const CmdArg* args);
+    //! @brief 'F': set the trigger rate (Timer1 frequency), store it in EEPROM,
+    //!        apply it on the fly and send it to the transmitter station.
+    //!
+    //! Sent as `F <Hz>`, TRIGGER_RATE_MIN_HZ to TRIGGER_RATE_MAX_HZ (1–50 Hz).
+    //! Timer1 restarts with TOP = triggerRateToTop(Hz); a PKT_RATE packet (sent
+    //! three times) makes the transmitter station store the same TOP and reset.
+    //! The sampling time (stored and in force) is set to its maximum, 80 % of
+    //! the new period; 'H' can shorten it afterwards. Out of range changes
+    //! nothing.
+    //! @param args `args[0].i` is the rate in Hz.
+    //! @par Reply
+    //! @code
+    //! F: <rate in force (Hz)>, <Timer1 TOP>, <sampling time in force (ms)>
+    //! @endcode
+    void onSetTriggerRate(const CmdArg* args);
+    //! @brief Restart Timer1 at the stored trigger rate, send it to the
+    //!        transmitter station and re-apply the sampling settings.
+    void applyTriggerRate();
     // Example of a command with an argument (see the constructor).
     //void onSetDelay(const CmdArg* args);
 

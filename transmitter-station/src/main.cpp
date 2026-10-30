@@ -13,6 +13,36 @@
 #include "led_control.h"
 #include "timers.h"
 #include "sysreset.h"
+#include <EEPROM.h>
+
+//! @name Stored trigger rate
+//! The Timer1 TOP set by the base station's 'F' command (a PKT_RATE packet),
+//! kept in EEPROM so this board comes back up at the same rate after a reset
+//! or power cycle. Record at address 0: magic, TOP, ~TOP.
+//! @{
+constexpr int      RATE_EEPROM_ADDR = 0;
+constexpr uint16_t RATE_MAGIC       = 0x7A7E;
+struct RateRecord { uint16_t magic; uint16_t top; uint16_t check; };
+//! @}
+
+//! @brief Timer1 TOP stored in EEPROM, or the default rate's TOP if none is valid.
+uint16_t loadTimer1Top() {
+    RateRecord rec;
+    EEPROM.get(RATE_EEPROM_ADDR, rec);
+    if (rec.magic == RATE_MAGIC && rec.check == (uint16_t)~rec.top && timer1TopIsValid(rec.top)) {
+        return rec.top;
+    }
+    return triggerRateToTop(TRIGGER_RATE_HZ);
+}
+
+//! @brief Store a Timer1 TOP in EEPROM (only changed bytes are written).
+void saveTimer1Top(uint16_t top) {
+    const RateRecord rec = { RATE_MAGIC, top, (uint16_t)~top };
+    EEPROM.put(RATE_EEPROM_ADDR, rec);
+}
+
+//! New Timer1 TOP received in a PKT_RATE packet; 0 = none. Handled in loop().
+volatile uint16_t new_timer1_top = 0;
 
 //! Serial baud rate for debugging
 constexpr unsigned int BAUD_RATE  = 38400;
@@ -51,7 +81,9 @@ void onRadioIRQ() {
         switch (pkt.type) {
             case PKT_SYNC:
                 // Correct the local timer phase to match the base station
-                pllCorrect((int16_t)(pkt.timestamp - TCNT1));
+                // A timestamp above our TOP means the base runs another rate (its
+                // PKT_RATE was missed); correcting would push TCNT1 past OCR1A.
+                if (pkt.timestamp <= timer1_top) pllCorrect((int16_t)(pkt.timestamp - TCNT1));
                 break;
 
             case PKT_TRIGGER:
@@ -60,7 +92,17 @@ void onRadioIRQ() {
                 //! tick_delay is declared externally (timers.h)
                 tick_delay = pkt.tick_delay;
                 // Correct the local timer phase to match the base station
-                pllCorrect((int16_t)(pkt.timestamp - TCNT1));
+                // A timestamp above our TOP means the base runs another rate (its
+                // PKT_RATE was missed); correcting would push TCNT1 past OCR1A.
+                if (pkt.timestamp <= timer1_top) pllCorrect((int16_t)(pkt.timestamp - TCNT1));
+                break;
+
+            case PKT_RATE:
+                // Only act on a TOP that differs: the base station also sends
+                // its rate at every boot.
+                if (RadioController::isRatePacket(pkt) && pkt.timestamp != timer1_top) {
+                    new_timer1_top = pkt.timestamp;
+                }
                 break;
 
             case PKT_RESET:
@@ -86,7 +128,8 @@ void setup()
   DEBUG_PRINTLN("=== Transmitter station starting ===");
 
   //! Timer setup
-  timer1_init_10Hz();
+  // Trigger rate set by the base station's 'F' command (10 Hz by default)
+  timer1_init(loadTimer1Top());
 
   //! Pin setup
   pinMode(triggerPin, OUTPUT);
@@ -114,6 +157,15 @@ void setup()
 void loop()
 {
   //! Reset packet received from the base station: reboot this board
+  // New trigger rate from the base station: store it, then reset so the board
+  // comes up cleanly at the new rate (PLL re-locks on the next sync packet).
+  if (new_timer1_top != 0) {
+      saveTimer1Top(new_timer1_top);
+      DEBUG_INFO_PRINTLN("[INFO] New trigger rate received. Resetting.");
+      Serial.flush();
+      systemReset();   // does not return
+  }
+
   if (reset_requested) {
       DEBUG_INFO_PRINTLN("[INFO] Reset packet received. Resetting.");
       Serial.flush();

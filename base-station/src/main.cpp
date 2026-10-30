@@ -23,8 +23,8 @@
 //! In the above example the values represent the time it takes for the sound to
 //! travel the distance to each of the six towers, respectively. The unit of time for
 //! the numbers is "counts" (ticks): one count is one iteration of the sampling loop
-//! in UltrasonicSampling::measureEchoTimes(), about 1.125 us with the current build
-//! (SAMPLING_LOOP_CYCLES CPU cycles at 16 MHz). The values will definitely have an
+//! in UltrasonicSampling::measureEchoTimes() (sampling is bounded by the TCNT1 timeout)
+//! (sampling stops on the TCNT1 timeout). The values will definitely have an
 //! Ax+B type of offset, where x is the count value, A is the scaling factor from
 //! counts to distance (or time) and B is the scaling offset necessary to adjust for
 //! counts not starting exactly at zero.
@@ -94,6 +94,9 @@ SettingsEeprom settings;
 UltrasonicSampling sampler;
 
 //! Serial commands; loop() calls its poll() (and, in continuous mode, runContinuous()).
+//! Milliseconds between re-sends of the trigger rate (PKT_RATE) in loop().
+constexpr unsigned long RATE_RESEND_INTERVAL_MS = 1000;
+
 CommandControl cmdCtrl(radioCtrl, leds, settings, sampler);
 
 //! @brief Arduino set-up, run once after power-up or reset.
@@ -127,8 +130,8 @@ void setup()
   // Initialize the LEDs (0: without the startup animation)
   leds.init(0);
   
-  // Initialize the timers (Timer1 at 10 Hz)
-  timer1_init_10Hz();
+  // Start Timer1 at the stored trigger rate ('F' command; 10 Hz by default)
+  timer1_init(triggerRateToTop(settings.getTriggerRateHz()));
   // Echo pins, sampling time (capped by the trigger rate, so after the timer start) and transition cap from EEPROM
   sampler.applySettings(settings);
   
@@ -152,6 +155,10 @@ void setup()
 
   // Radio initialized successfully: keep the RADIO_STATUS LED on
   leds.setRadioStatus(true);
+
+  // Make sure the transmitter station runs at the same rate. It ignores the
+  // packet if it already has this TOP, otherwise it stores it and resets.
+  radioCtrl.sendRate(timer1_top);
 
 }
 
@@ -187,6 +194,15 @@ void loop()
     long lastPulseTime = 0;
 
     cmdCtrl.poll();
+
+    // Re-send the trigger rate once a second so a transmitter station that
+    // missed it (powered up later, rebooted, out of range) catches up. It
+    // ignores a TOP it already has, so this never causes a reset loop.
+    static unsigned long lastRateTime = 0;
+    if (millis() - lastRateTime >= RATE_RESEND_INTERVAL_MS) {
+        lastRateTime = millis();
+        radioCtrl.sendRate(timer1_top, 1);
+    }
 
     // Periodic functions (timed with millis(), not delay())
     if (millis() - lastSyncTime >= (unsigned int)settings.getSyncPllInterval()) {

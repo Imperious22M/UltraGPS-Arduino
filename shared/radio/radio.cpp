@@ -134,6 +134,24 @@ bool RadioController::receiveTrigger(uint16_t &out_timer_val, uint16_t &out_tick
 // ---------------------------------------------------------------------------
 // isResetPacket()
 // ---------------------------------------------------------------------------
+bool RadioController::sendRate(uint16_t timer1_top, uint8_t repeats) {
+    DEBUG_INFO_PRINTF("[TX] Sending rate packet, TOP %u\n", timer1_top);
+    CommsPacket pkt(PKT_RATE, timer1_top, (uint16_t)~timer1_top);
+    bool any_ok = false;
+    for (uint8_t i = 0; i < repeats; i++) {
+        if (_writePacket(pkt)) any_ok = true;
+        // Give the receiver time to drain its FIFO between copies
+        delay(2);
+    }
+    return any_ok;
+}
+
+bool RadioController::isRatePacket(const CommsPacket &pkt) {
+    return pkt.type == PKT_RATE
+        && pkt.tick_delay == (uint16_t)~pkt.timestamp
+        && timer1TopIsValid(pkt.timestamp);
+}
+
 bool RadioController::isResetPacket(const CommsPacket &pkt) {
     return pkt.type == PKT_RESET && pkt.timestamp == RESET_MAGIC;
 }

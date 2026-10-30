@@ -40,7 +40,7 @@ program (`UltraGpsXY`) talks to over USB serial.
 | Dependency | [`nRF24/RF24`](https://github.com/nRF24/RF24) (pulled in automatically) |
 | Serial | 38400 bps, 8N1 |
 | Radio | nRF24L01+, channel 125, 1 Mbps, 8-byte fixed payload |
-| Pulse rate | 10 Hz (Timer1, CTC mode) |
+| Pulse rate | 10 Hz by default, 1–50 Hz with `F` (Timer1, CTC mode) |
 | Receivers | 6, on `A0`–`A5` |
 
 ## Quick start

@@ -70,6 +70,7 @@ void SettingsEeprom::loadDefaults(Data &data) {
     data.resetSelfDelayMs          = RESET_SELF_DELAY_MS;
     data.samplingTimeMs            = SAMPLING_TIME_MS;
     data.maxSavedTicks             = MAX_SAVED_TICKS;
+    data.triggerRateHz             = TRIGGER_RATE_HZ;
 }
 
 bool SettingsEeprom::isValid(const Data &data) {
@@ -95,7 +96,9 @@ bool SettingsEeprom::isValid(const Data &data) {
         && data.samplingTimeMs >= SAMPLING_TIME_MIN_MS
         && data.samplingTimeMs <= SAMPLING_TIME_MAX_MS
         && data.maxSavedTicks >= MAX_SAVED_TICKS_MIN
-        && data.maxSavedTicks <= SAMPLE_BUFFER_SIZE;
+        && data.maxSavedTicks <= SAMPLE_BUFFER_SIZE
+        && data.triggerRateHz >= TRIGGER_RATE_MIN_HZ
+        && data.triggerRateHz <= TRIGGER_RATE_MAX_HZ;
 }
 
 uint16_t SettingsEeprom::crc(const Data &data) {
@@ -157,6 +160,7 @@ bool          SettingsEeprom::getResetSelfAfterRemoteReset() const { return _dat
 uint16_t      SettingsEeprom::getResetSelfDelayMs() const          { return _data.resetSelfDelayMs; }
 uint16_t      SettingsEeprom::getSamplingTimeMs() const            { return _data.samplingTimeMs; }
 uint8_t       SettingsEeprom::getMaxSavedTicks() const             { return _data.maxSavedTicks; }
+uint8_t       SettingsEeprom::getTriggerRateHz() const             { return _data.triggerRateHz; }
 
 // ---------------------------------------------------------------------------
 // Setters
@@ -224,6 +228,10 @@ bool SettingsEeprom::setResetSelfDelayMs(uint16_t ms) {
 
 bool SettingsEeprom::setSamplingTimeMs(uint16_t ms) {
     return store(_data.samplingTimeMs, ms, ms >= SAMPLING_TIME_MIN_MS && ms <= SAMPLING_TIME_MAX_MS);
+}
+
+bool SettingsEeprom::setTriggerRateHz(uint8_t hz) {
+    return store(_data.triggerRateHz, hz, hz >= TRIGGER_RATE_MIN_HZ && hz <= TRIGGER_RATE_MAX_HZ);
 }
 
 bool SettingsEeprom::setMaxSavedTicks(uint8_t count) {

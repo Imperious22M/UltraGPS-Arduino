@@ -57,7 +57,8 @@ enum PacketType : uint8_t {
     PKT_NO_DATA = 1,   //!< Used just for initialization (default-constructed packet); never sent.
     PKT_TRIGGER = 2,   //!< Measurement trigger: carries the Timer1 value + burst delay (> 0).
     PKT_RESET   = 3,   //!< Reset the transmitter station; timestamp must hold RESET_MAGIC.
-    PKT_SYNC    = 4    //!< PLL phase correction only (Timer1 value); never touches the burst delay.
+    PKT_SYNC    = 4,   //!< PLL phase correction only (Timer1 value); never touches the burst delay.
+    PKT_RATE    = 5    //!< New trigger rate: timestamp = Timer1 TOP, tick_delay = ~TOP. The transmitter stores it and resets.
 };
 
 //! @brief Value carried in CommsPacket::timestamp of a PKT_RESET packet.
@@ -69,6 +70,32 @@ constexpr uint16_t RESET_MAGIC = 0xA55A;
 //!
 //! Default for the repeat count of RadioController::sendReset().
 constexpr uint8_t RESET_PACKET_REPEATS = 3;
+
+//! @name Trigger rate (Timer1 frequency), shared by both stations
+//! @{
+
+//! Timer1 counts per second: 16 MHz / prescaler 256 = 62500 (one count = 16 us).
+constexpr uint32_t TIMER1_COUNTS_PER_S = F_CPU / 256UL;
+constexpr uint8_t TRIGGER_RATE_MIN_HZ = 1;   //!< Slowest trigger rate (Timer1 TOP 62499).
+constexpr uint8_t TRIGGER_RATE_MAX_HZ = 50;  //!< Fastest trigger rate (20 ms period).
+constexpr uint8_t TRIGGER_RATE_HZ     = 10;  //!< Default trigger rate.
+
+//! @}
+
+//! @brief Timer1 TOP (OCR1A) value for a trigger rate.
+//!
+//! TOP = round(62500 / hz) - 1, so the period is (TOP + 1) x 16 us.
+//! @param hz Trigger rate in Hz, TRIGGER_RATE_MIN_HZ to TRIGGER_RATE_MAX_HZ.
+//! @return The TOP value.
+constexpr uint16_t triggerRateToTop(uint8_t hz) {
+    return (uint16_t)((TIMER1_COUNTS_PER_S + hz / 2) / hz - 1);
+}
+
+//! @brief True if @p top is a Timer1 TOP value within the allowed rate range.
+//! @param top Timer1 TOP value.
+constexpr bool timer1TopIsValid(uint16_t top) {
+    return top >= triggerRateToTop(TRIGGER_RATE_MAX_HZ) && top <= triggerRateToTop(TRIGGER_RATE_MIN_HZ);
+}
 
 //! @brief Packet structure between the base station and the ultrasonic transmitter station.
 //!
@@ -172,6 +199,14 @@ public:
     //! @param repeats Number of copies to send; 0 sends nothing.
     //! @return true if at least one write succeeded.
     bool sendReset(uint8_t repeats = RESET_PACKET_REPEATS);
+    //! @brief Send a new trigger rate (Timer1 TOP) to the transmitter station.
+    //!
+    //! Sent @p repeats times like a reset, since the link has no auto-ack. A
+    //! transmitter whose TOP differs stores the new one and resets itself.
+    //! @param timer1_top New Timer1 TOP value (see triggerRateToTop()).
+    //! @param repeats    Number of copies sent.
+    //! @return true if at least one write succeeded.
+    bool sendRate(uint16_t timer1_top, uint8_t repeats = RESET_PACKET_REPEATS);
 
     // --- transmitter station side ------------------------------
     //! @brief Pull the next packet out of the RX FIFO.
@@ -191,6 +226,10 @@ public:
     //! @param pkt Packet to check.
     //! @return true if @p pkt is a PKT_RESET whose timestamp holds RESET_MAGIC.
     static bool isResetPacket(const CommsPacket &pkt);
+    //! @brief Check whether a packet is a well-formed trigger-rate packet.
+    //! @param pkt Received packet.
+    //! @return true if it is PKT_RATE, tick_delay == ~timestamp and the TOP is valid.
+    static bool isRatePacket(const CommsPacket &pkt);
 
     // --- both -------------------------------------------------
     //! @brief Read and clear the radio's interrupt flags (RF24::whatHappened()).

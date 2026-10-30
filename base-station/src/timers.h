@@ -41,6 +41,12 @@ extern uint16_t tick_delay;
 //! Call one of them from setup().
 //! @{
 
+//! @brief Start Timer1 (CTC, prescaler 256) with the given TOP; see timers.cpp.
+//!
+//! Used for the trigger rate set with the 'F' command (triggerRateToTop()).
+//! @param top Value for OCR1A; the period is (top + 1) x 16 us.
+void timer1_init(uint16_t top);
+
 //! @brief Initialize Timer1 in CTC mode at exactly 10 Hz.
 //!
 //! 16 MHz / prescaler 256 / (OCR1A + 1) = 16000000 / 256 / 6250 = 10 Hz.

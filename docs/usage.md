@@ -2,10 +2,10 @@
 
 Only the **base station** has a user interface. It listens on USB serial at
 38400 bps by default and responds to single-letter commands. Its settings — the
-burst delay, the sampling time and the rest — are kept in its EEPROM, so they
+burst delay, the sampling time, the trigger rate and the rest — are kept in its EEPROM, so they
 survive resets, power cycles and reflashing. The transmitter station has no
 command interface — once flashed it runs autonomously, reacting to radio packets
-and its own timer.
+and its own timer; it keeps only the trigger rate sent by `F` in its EEPROM.
 
 ## Connecting
 
@@ -44,8 +44,9 @@ silently discarded (see [Invalid input](#invalid-input)).
 | `R` | Reset the transmitter station over the radio. The base station resets too only if `RESET_SELF_AFTER_REMOTE_RESET` is set (default `false`). Returns to polling mode. | `N: R` |
 | `D` | Sweep the transmitter's burst delay (0 to 500 µs by default), then store in EEPROM and apply the delay with the most valid readings (ties broken by the lowest mean tick count). Returns to polling mode. | One `D:` line per step (by default), then the result `D:` line; ~15 s in all |
 | `E` | Store the default burst delay, `SONIC_BURST_DELAY` (2000 µs), as the delay in force. Returns to polling mode. | One `E:` line |
-| `H <ms>` | Set the echo sampling time to `<ms>` milliseconds (1 ms up to 80 % of the trigger period — 80 at 10 Hz; default 80), store it in EEPROM and apply it. Returns to polling mode. | One `H:` line |
-| `M` | Reset every stored setting (burst delay, sampling time and the rest) to its default and apply it. Returns to polling mode. | `M: OK` |
+| `H <ms>` | Set the echo sampling time to `<ms>` milliseconds (1 ms up to 80 % of the Timer1 period at the current trigger rate — 80 at 10 Hz, 40 at 20 Hz; default 80), store it in EEPROM and apply it. Returns to polling mode. | One `H:` line |
+| `F <Hz>` | Set the trigger rate (1–50 Hz, default 10) on both stations: store it in EEPROM, restart Timer1, send it to the transmitter (which stores it and resets) and cap the sampling time to the new period. Returns to polling mode. | One `F:` line |
+| `M` | Reset every stored setting (burst delay, sampling time, trigger rate and the rest) to its default and apply it (the default rate is also sent to the transmitter). Returns to polling mode. | `M: OK` |
 
 !!! note "Line endings matter"
     `CommandHandler::poll()` (which `CommandControl` inherits) only dispatches
@@ -117,33 +118,54 @@ the default delay too, along with everything else.
 ### Setting the sampling time
 
 `H` sets how long the echo lines are sampled after each trigger, in whole
-milliseconds from 1 to 1000; the space after the letter is optional (`H 80` or
-`H80`). The value is stored in EEPROM and used from the next measurement on. The
-reply gives the sampling time now in force and the maximum tick count it allows:
+milliseconds from 1 up to 80 % of the Timer1 period at the current trigger rate
+(80 ms at 10 Hz, 40 ms at 20 Hz, 800 ms at 1 Hz; never above 1000 ms); the space
+after the letter is optional (`H 80` or `H80`). The value is stored in EEPROM and
+used from the next measurement on. The reply gives the sampling time now in
+force and the same window in Timer1 counts (16 µs each, ms × 1000 / 16):
 
 ```
 H 80
-H: 80, 71111
+H: 80, 5000
 ```
 
-The milliseconds are converted to sampling-loop iterations (ticks, see
-[What the numbers mean](#what-the-numbers-mean)) as ms × 16000 / 18 — CPU
-cycles per millisecond over `SAMPLING_LOOP_CYCLES` — rounded down: 1 ms is 888
-ticks and the default 80 ms is 71111. A number outside 1 ms to 80 % of the
-trigger period (80 ms at 10 Hz) changes nothing, and the reply shows the values still in force, so compare it
-with what you sent.
+A number outside that range changes nothing, and the reply shows the values
+still in force, so compare it with what you sent.
 
-The 80 ms default is the window earlier firmware actually used: it stopped
-sampling at 80 % of the 100 ms Timer1 period (at 10 Hz). That cut-off is now
-commented out in `ultrasonic-sampling.cpp`, so the sampling time alone sets the
-window. Instead the sampling time is capped at 80 % of the trigger period
-(80 ms at 10 Hz, 40 ms at 20 Hz), so a window can never run into the next
-trigger pulse; a stored value above the cap is clamped at boot.
+As in the original firmware, sampling is bounded by Timer1: the loop stops once
+`TCNT1` has advanced the sampling time, and never later than 80 % of the Timer1
+period, so a window can never run into the next trigger pulse. Changing the
+rate with `F` sets the sampling time to the new cap; use `H` afterwards for a
+shorter window.
+
+### Setting the trigger rate
+
+`F` sets the trigger (pulse) rate of **both** stations in whole hertz, 1 to 50
+(`F 20` or `F20`; default 10). The base station stores it in EEPROM, restarts
+its Timer1 with the new period, sends the rate to the transmitter station in a
+`PKT_RATE` packet (three copies) and sets the stored sampling time to 80 % of the new period. The reply gives
+the rate, the Timer1 TOP and the sampling time now in force:
+
+```
+F 20
+F: 20, 3124, 40
+```
+
+Here the sampling time becomes 40 ms, 80 % of the 50 ms period, and is
+stored; `F 10` would set it back to 80 ms. An out-of-range value changes nothing. The transmitter station stores
+the new rate in its own EEPROM and resets itself to apply it, so the first
+measurements after `F` may come back empty while it restarts and re-locks.
+
+!!! warning "Both boards need this firmware"
+    A transmitter running older firmware does not know `PKT_RATE` and stays at
+    10 Hz, and two boards at different rates give unusable timing. Reflash both
+    boards together.
 
 ### Restoring the default settings
 
 `M` writes the default of every stored setting back to EEPROM and applies it at
-once: the burst delay, the sampling time, the `D` sweep parameters,
+once: the burst delay, the sampling time, the trigger rate (10 Hz, also sent to
+the transmitter), the `D` sweep parameters,
 `RESET_SELF_AFTER_REMOTE_RESET`, the baud rate and the rest. The defaults are
 the constants in `base-station/src/settings-eeprom.h` (see
 [Configuration](configuration.md)). It replies:
@@ -222,37 +244,29 @@ C: 4398, 3231, 4059, 4044, 3130, 4112
 | `C: ` | Continuous — part of the stream started by `C` |
 
 Replies to the other commands carry their own letter as the marker (`D:`, `E:`,
-`H:`, `M:`), except `R`, which answers `N: R`. The marker exists so a consuming
+`H:`, `F:`, `M:`), except `R`, which answers `N: R`. The marker exists so a consuming
 program can tell solicited replies from streamed data on the same port.
 
 ### What the numbers mean
 
-Each value is the number of sampling-loop iterations between the trigger and
-that receiver's echo going low — a **tick**, not microseconds and not
-millimetres. One iteration of the loop in `UltrasonicSampling::measureEchoTimes()`
-takes 18 CPU cycles (`SAMPLING_LOOP_CYCLES`), so a tick is about 1.125 µs on the
-16 MHz Uno. The figure is approximate: each saved echo transition adds 26 cycles
-that are not counted, interrupts stay enabled while sampling (the `millis()`
-interrupt alone stretches real time by about 0.6 %), and the Uno's ceramic
-resonator is not exactly 16 MHz. A build with `DEBUG` defined compiles the loop
-differently (30 cycles per iteration), so its counts are not comparable.
+Each value is the number of Timer1 counts (`TCNT1`, 16 µs each) between the
+start of sampling, right after the trigger, and that receiver's echo going low
+— a **tick**. Multiply by 16 for microseconds. The original firmware printed
+sampling-loop iterations (about 29 µs each); ticks are now independent of how
+fast the loop runs, including in a `DEBUG` build.
 
 Converting to distance takes the form `Ax + B`, where `A` scales counts to time
 or distance and `B` absorbs the fact that counting does not start at exactly
 zero. Both constants are determined by calibration downstream; the firmware does
 no conversion.
 
-!!! warning "Recalibrate after upgrading"
-    Firmware without the `H` command, such as v1.0, also computed its 80 %
-    Timer1 cut-off on every loop iteration, which made a tick about 29 µs. With
-    1.125 µs ticks the same distance now gives a count about 26 times larger,
-    so any `A` and `B` calibrated with the old firmware must be determined
-    again.
+!!! warning "Check the calibration after upgrading"
+    The tick duration depends on the compiled loop, so check any `A` and `B`
+    against known distances whenever new firmware is flashed.
 
 A value of `0` means that receiver never produced a usable echo transition
 within the sampling window (the sampling time set with `H`) — out of range, not
-wired, or the pulse never fired. Any other value is below the maximum tick count
-that `H` reports: 71111 at the default 80 ms.
+wired, or the pulse never fired.
 
 ## Example session
 
@@ -284,14 +298,12 @@ never within 2 ms of a compare match (`TRIGGER_SEND_GUARD_TICKS`, 125 Timer1
 ticks by default). The default 80 ms window leaves about 20 ms of the 100 ms
 period at 10 Hz. If sampling ends too close to the next compare match, or after
 it, the next measurement waits a further period and the stream drops to one line
-every two or more periods — with readings that are not meaningful once the
-window passes the period (see
-[Setting the sampling time](#setting-the-sampling-time)).
+every two or more periods.
 
-Raising the output rate means changing the timer rate on **both** boards — see
-[Configuration](configuration.md) — and lowering the sampling time with `H` to
-fit the shorter period: the default 80 ms is longer than the period at 15 Hz
-(about 67 ms) and at 20 Hz (50 ms).
+Raising the output rate means raising the trigger rate with `F` — see
+[Setting the trigger rate](#setting-the-trigger-rate). The sampling time is
+capped at 80 % of the shorter period automatically, which also shortens the
+maximum measurable range.
 
 ## Startup behaviour
 
@@ -310,12 +322,14 @@ On reset the base station:
 3. Sets the echo pins (`A0`–`A5`) to `INPUT_PULLUP` and applies the stored
    sampling time.
 4. Initialises the LEDs (animation off by default).
-5. Starts Timer1 at 10 Hz.
+5. Starts Timer1 at the stored trigger rate (10 Hz by default).
 6. Initialises the radio. **If this fails the sketch halts**, blinking
    `RADIO_STATUS` on a two-second cycle (1 s on, 1 s off) and printing
    `[ERROR] Still halted.` on each cycle. Nothing recovers this except fixing
    the wiring and resetting the board.
-7. Leaves `RADIO_STATUS` solid and waits for commands.
+7. Sends its trigger rate to the transmitter station once (a `PKT_RATE`
+   packet), so a transmitter left at another rate follows it.
+8. Leaves `RADIO_STATUS` solid and waits for commands.
 
 There is no banner or ready message on a successful start — the first output you
 see is the response to your first command. With `INFO_DEBUG` defined (see

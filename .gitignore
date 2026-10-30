@@ -2,3 +2,5 @@
 site/
 # Collected release artefacts (build.sh dist)
 dist/
+# PlatformIO installed by build.sh when no working pio is found
+.venv-platformio/

@@ -63,9 +63,9 @@ was blocked); `apt install doxygen` if it is wanted.
 
 ## Serial protocol (base station)
 
-One letter (+ argument for `H`) + newline. Replies start with a marker: `N:` for
+One letter (+ argument for `H`/`F`) + newline. Replies start with a marker: `N:` for
 `P`, `S`, `R` (`C:` in continuous mode), otherwise the command letter (`D:`,
-`E:`, `H:`, `M:`). Invalid lines (unknown letter, missing/non-numeric `H`
+`E:`, `H:`, `F:`, `M:`). Invalid lines (unknown letter, missing/non-numeric `H`/`F`
 argument) get no reply.
 
 | Cmd | Effect | Reply |
@@ -76,16 +76,23 @@ argument) get no reply.
 | `R` | Send `PKT_RESET` to transmitter (base resets too only if `RESET_SELF_AFTER_REMOTE_RESET`, default **false**) | `N: R` |
 | `D` | Sweep burst delay 0–500 µs (10 µs steps, 3 pulses each), store + apply best | `D: <delay>, <mean>, <valid>/<total>` (one line per step too, `SEARCH_PRINT_STEPS` = true) |
 | `E` | Store `SONIC_BURST_DELAY` as the burst delay again | `E: <delay>` |
-| `H <ms>` | Sampling time 1 ms – 80 % of trigger period (80 ms at 10 Hz), stored + applied | `H: <ms>, <max ticks>` e.g. `H: 80, 71111` |
-| `M` | Every setting back to its default (EEPROM + RAM) | `M: OK` (sent before the defaults, incl. baud rate, are applied) |
+| `H <ms>` | Sampling time 1 ms – 80 % of Timer1 period at current rate (80 ms at 10 Hz, 40 at 20, 800 at 1; ≤ 1000), stored + applied | `H: <ms>, <Timer1 counts>` e.g. `H: 80, 5000` |
+| `F <Hz>` | Trigger rate 1–50 Hz (default 10): stored, Timer1 restarted (`timer1_init(top)`), `PKT_RATE` sent 3×, stored sampling time set to 80 % of the new period | `F: <Hz>, <TOP>, <sampling ms>` e.g. `F: 20, 3124, 40` |
+| `M` | Every setting back to its default (EEPROM + RAM); also re-applies and sends the default rate | `M: OK` (sent before the defaults, incl. baud rate, are applied) |
 
-All of `D E H M R P S` return to polling mode (end continuous mode).
+All of `D E H F M R P S` return to polling mode (end continuous mode).
 
 ## Radio protocol (`shared/radio/radio.h`)
 
 Packet types: `PKT_TRIGGER` (PLL phase + stores the burst delay on the
 transmitter; carries TCNT1 + `tick_delay` > 0), `PKT_SYNC` (PLL phase only,
-never touches delay), `PKT_RESET` (must carry `RESET_MAGIC` 0xA55A, sent 3×).
+never touches delay), `PKT_RESET` (must carry `RESET_MAGIC` 0xA55A, sent 3×),
+`PKT_RATE` (5; timestamp = Timer1 TOP, tick_delay = ~TOP, sent 3× after `F`,
+`M` and once at every base boot). The transmitter, on a valid `PKT_RATE` with a
+TOP different from its own, stores it in its EEPROM (address 0: magic 0x7A7E,
+TOP, ~TOP) and watchdog-resets; at boot it starts Timer1 from that record
+(default 10 Hz). Rate constants, `triggerRateToTop()` (round(62500/Hz)-1) and
+`timer1TopIsValid()` are in `radio.h`. **Both boards must be reflashed together.**
 The transmitter fires on every compare match, delayed by the stored delay.
 Channel 125, 1 Mbps, no auto-ack by design.
 
@@ -95,12 +102,20 @@ Channel 125, 1 Mbps, no auto-ack by design.
 `handleUltrasonics()` also won't send a trigger within 2 ms of the compare match
 (`TRIGGER_SEND_GUARD_TICKS`) as belt and braces.
 
+Rate-change robustness: the base re-sends `PKT_RATE` (one copy) every second
+from `loop()` (`RATE_RESEND_INTERVAL_MS`), and the transmitter ignores sync and
+trigger timestamps above its own TOP, so a missed rate packet heals within a
+second instead of leaving the boards on different rates. `timer1_init()` clears
+a pending OCF1A, and the sampling loop also stops if `trigger_fired` is set.
+
 ## Settings in EEPROM (`settings-eeprom.*`)
 
 - Defaults are the constants in `settings-eeprom.h` (the user's list: trigger
   high duration, echo pins, receiver count (read-only), baud rate, sync
   interval, burst delay, send guard, search parameters, reset behaviour) plus
-  `SAMPLING_TIME_MS` (80) and `MAX_SAVED_TICKS` (100). `static_assert`s reject
+  `SAMPLING_TIME_MS` (80), `MAX_SAVED_TICKS` (100) and `triggerRateHz`
+  (`TRIGGER_RATE_HZ` = 10). `SETTINGS_LAYOUT_VERSION` = **2** (bumped when the
+  rate was added, so older boards rewrite defaults on next boot). `static_assert`s reject
   invalid defaults.
 - Record at EEPROM address 0: header (magic 0x5E77, `SETTINGS_LAYOUT_VERSION`,
   size) + data + CRC-16. `begin()` (called in `setup()` before `Serial.begin()`)
@@ -116,31 +131,28 @@ Channel 125, 1 Mbps, no auto-ack by design.
   all defaults (never a mixed record).
 - Sampling time, echo pins and the transition cap are held twice
   (`SettingsEeprom` and `UltrasonicSampling`); call
-  `UltrasonicSampling::applySettings()` after changing them (`H`, `M`, `setup()` do).
-- Only `D`, `E`, `H`, `M` reach setters. No command sets the baud rate etc. yet.
+  `UltrasonicSampling::applySettings()` after changing them (`H`, `F`, `M`, `setup()` do).
+- Only `D`, `E`, `H`, `F`, `M` reach setters. No command sets the baud rate etc. yet.
 
 ## Sampling (`ultrasonic-sampling.*`) — read before touching `measureEchoTimes()`
 
-- A tick = one iteration of the sampling loop. `SAMPLING_LOOP_CYCLES` = **18**
-  (verified by static count of the ELF and by running it in `avr-gdb`'s AVR
-  simulator: `target sim`, 18 cycles without a transition, 44 with one), so
-  1 tick = 1.125 µs; `ticks = ms × 16000 / 18`. A `DEBUG` build compiles the
-  loop to 30 cycles, so `SAMPLING_LOOP_CYCLES` is 30 there (`#ifdef DEBUG`).
-- The count depends on register allocation. `measureEchoTimes()` is
-  `__attribute__((noinline, noclone, externally_visible))` so LTO cannot
-  inline/clone/specialise it (without these it was 16, 17 or 18 depending on
-  unrelated code). Re-count after editing that function or changing compiler
-  flags.
-- The TCNT1 80 % timeout is commented out (as the user asked). With it, every
-  iteration did a 16-bit modulo + soft-float multiply (~470 cycles ≈ 29 µs), so
-  the old firmware's ticks were ~26× larger and sampling really ended at ~80 ms;
-  the old "about 60 ms" comment was stale. Hence the 80 ms default.
-  **Tick counts are now ~26× larger: downstream calibration must be redone.**
-- The sampling time is capped (user's request, 2026-10-29) at
-  `SAMPLING_WINDOW_MAX_PERCENT` = 80 % of the trigger period, computed from
-  `timer1_top` in `UltrasonicSampling::maxSamplingTimeMs()`; `H` rejects more,
-  `applySettings()` clamps a stored value, so `setup()` calls it after
-  `timer1_init_*()`. `SAMPLING_TIME_MAX_MS` (1000) is now only the outer bound.
+- A tick = one Timer1 count (16 µs): each echo change is timestamped with the
+  TCNT1 counts elapsed since sampling started (user's request, 2026-10-29;
+  loop-iteration ticks were ~15× larger than the original's and loop-speed
+  dependent). At ~15 cm expect ~230 counts (≈3.7 ms incl. receiver delay).
+  The window is bounded by TCNT1 (user's request, 2026-10-29, after the
+  CPU-cycle tick count proved unreliable; that conversion and its
+  noinline/noclone attributes and DEBUG variant are gone): `measureEchoTimes()`
+  reads TCNT1 at the start (`base_tick`), each pass computes elapsed counts
+  (adding one period if TCNT1 wrapped) and breaks at `limit` =
+  min(`msToCounts(ms)` = ms*1000/16, 80 % of `timer1_top+1`), computed once
+  before the loop (the original firmware recomputed a modulo + float multiply
+  every pass). Tick duration depends on the compiled loop and is not
+  specified; **downstream calibration should be checked**.
+- `maxSamplingTimeMs()` = `SAMPLING_WINDOW_MAX_PERCENT` (80 %) of the Timer1
+  period at the current rate, ≤ `SAMPLING_TIME_MAX_MS` (1000). `H` rejects
+  more; `applySettings()` clamps a stored value, so `setup()` calls it after
+  `timer1_init(top)`. `getSamplingCounts()`, `TIMER1_US_PER_COUNT` = 16.
 - Echo pins may be remapped within A0–A5 (one PINC read); defaults reproduce
   the old `PINC & 63` exactly. Two quirks of the original reduction are kept on
   purpose: the fallen line is found by subtracting consecutive PINC values, and
@@ -162,8 +174,8 @@ Session of 2026-10-28/29 (four tasks the user listed, done in order):
    break the ODR); `SONIC_BURST_DELAY` stays its compile-time default rather
    than a second stored value. `delay_store.*` removed.
 2. `ultrasonic-sampling` class + `H`. "Maximum number of ticks saved" read as
-   the cap on saved transitions (`setMaxSavedTicks`); `setMaxTicks` sets the
-   window directly. The 66000*4 cap TODO now uses the configured max ticks.
+   the cap on saved transitions (`setMaxSavedTicks`). (The CPU-cycle tick
+   window from this session was later replaced by the TCNT1 bound.)
 3. `command_control.*` → `command_handler.*` (`CommandHandler`); new
    `CommandControl` derives from it. Callbacks take the handler
    (`void (*)(CommandHandler&, const CmdArg*)`) so handlers are private members
@@ -187,19 +199,18 @@ checks still owed:
 2. `D` sweep produces a sensible curve.
 3. First boot of this firmware writes the defaults; `H`/`M`/`D`/`E` persist
    across a power cycle (`INFO_DEBUG` prints which happened at boot).
-4. Sampling time vs. wall clock (expect ~0.6 % longer from the millis() ISR).
-5. Both boards **must be reflashed together** — old transmitter firmware does
-   not know `PKT_SYNC` and would lose PLL correction.
+4. Tick calibration: ticks are 16 µs Timer1 counts now; redo `Ax + B`.
+5. `F` changes the rate on both boards (transmitter stores TOP and resets),
+   and the transmitter comes back at the stored rate after a power cycle.
+6. Both boards **must be reflashed together** — old transmitter firmware does
+   not know `PKT_SYNC`/`PKT_RATE` and would lose PLL correction / ignore `F`.
 
 ## Possible next steps (not requested yet)
 
 - Serial commands for the other setters (baud rate, search range, …).
-- Decide what `H` > trigger period should do (cap / stop at compare match).
-- A script that re-counts `SAMPLING_LOOP_CYCLES` from the ELF (objdump or the
-  avr-gdb simulator), maybe hooked into `build.sh`.
 - Move `timers`, `led_control`, `debug_macros` into `shared/` too.
 - Make `lastSyncTime`/`lastPulseTime` static so the intervals mean something.
-- Have the ground-station program send `D`/`E`/`H`/`M` and parse the replies.
+- Have the ground-station program send `D`/`E`/`H`/`F`/`M` and parse the replies.
 
 ## Conventions
 

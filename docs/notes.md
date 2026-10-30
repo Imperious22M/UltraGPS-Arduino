@@ -79,72 +79,56 @@ during sampling, as the comment above the call says. The function supports
 both. Passing `true` would block the Timer1 ISR for the duration of the
 sampling window, which is why the enabled path is the one in use.
 
-Interrupt time is not counted in ticks, so it stretches the real sampling time:
-the `millis()` interrupt alone adds about 0.6 %. The base station attaches no
+The window is timed with `TCNT1`, so interrupts do not stretch it, but time
+spent in an interrupt is not counted in ticks (the `millis()` interrupt takes
+about 0.6 % of the time). The base station attaches no
 radio interrupt.
 
-## Tick counts are about 26× larger than before
+## Sampling is bounded by TCNT1 again
 
-The old sampling loop recomputed the TCNT1 cut-off on every iteration, with a
-16-bit modulo and a float multiply: about 470 CPU cycles, so a tick was about
-29 µs, and sampling really ended at the cut-off (80 % of the period, about
-80 ms at 10 Hz), never at its `0x31000/4` iteration limit. The cut-off is now
-commented out (still in place in `measureEchoTimes()`) and an iteration takes
-18 cycles, so a tick is 1.125 µs and counts for the same distance are about 26×
-larger:
+The sampling loop is timed with Timer1, as in the original firmware: it reads
+`TCNT1` at the start, computes the elapsed Timer1 counts on every pass (adding
+one period when `TCNT1` wrapped at the compare match) and stops once they reach
+a limit computed once before the loop, the smaller of the sampling time in
+counts (`ms × 1000 / 16`) and 80 % (`SAMPLING_WINDOW_MAX_PERCENT`) of
+`timer1_top + 1`. The original firmware recomputed its cut-off with a modulo and
+a float multiply on every pass; this one only subtracts and compares.
 
-- **Any calibration (`A` and `B` in `Ax + B`) must be redone**, and anything
-  downstream that expects counts in the old range needs checking.
-- The window is the same at the default 10 Hz (80 ms), but it no longer follows
-  the trigger rate: the cut-off scaled with the period, the sampling time does
-  not.
-- The simulated counts from `S` (around 401) were not rescaled, so they no
-  longer resemble real ones.
+An intermediate version counted CPU cycles instead (a fixed cycles-per-iteration
+constant converting milliseconds to ticks). That proved unreliable and was
+removed.
 
-Uncommenting the cut-off would add several hundred cycles per iteration again,
-and `SAMPLING_LOOP_CYCLES` would have to be re-counted.
+- The printed values are Timer1 counts (16 µs ticks) at which each echo fell,
+  not loop iterations, so they no longer depend on the loop speed. Loop-iteration
+  ticks came out about 15× larger than the original's once the slow modulo/float
+  check was gone. **Redo the calibration (`A` and `B` in `Ax + B`)** after
+  reflashing.
+- The window follows the trigger rate again: `H` accepts 1 ms up to 80 % of the
+  Timer1 period (80 ms at 10 Hz, 40 ms at 20 Hz, 800 ms at 1 Hz; never above
+  1000 ms) and replies `H: <ms>, <Timer1 counts>`, e.g. `H: 80, 5000`. Every `F`
+  sets the stored sampling time to that cap (the longest window the new rate
+  allows); `H` can shorten it afterwards. A stored value above the cap is
+  clamped at boot. `setup()` therefore applies the sampling settings after
+  starting Timer1.
+- The simulated counts from `S` (around 401) are not calibrated against real
+  ones.
 
-## `SAMPLING_LOOP_CYCLES` must match the compiled loop
+## The trigger rate is a runtime setting
 
-The sampling time is set in milliseconds and converted to a maximum number of
-loop iterations:
+`F <Hz>` (1–50 Hz, default 10) replaces editing a `timer1_init_*Hz()` call on
+both boards. The base station stores the rate in EEPROM (which is why
+`SETTINGS_LAYOUT_VERSION` became `2`: boards with older firmware rewrite their
+defaults on the next boot), restarts Timer1 with `timer1_init(top)`, sends a
+`PKT_RATE` packet (three copies) and re-caps the sampling time; it replies
+`F: <Hz>, <TOP>, <sampling ms>`. `M` re-applies and re-sends the default rate,
+and the base sends its rate once at every boot.
 
-```
-ticks = ms × (F_CPU / 1000) / SAMPLING_LOOP_CYCLES = ms × 16000 / 18
-```
-
-so 1 ms is 888 ticks, 80 ms is 71111 and 1000 ms is 888888.
-`SAMPLING_LOOP_CYCLES` = 18 was counted from the compiled loop (avr-gcc 7.3.0,
-`-Os`, LTO) and confirmed in avr-gdb's AVR simulator: 18 cycles per iteration
-without a transition, 44 with one, so each saved transition adds 26 uncounted
-cycles. The count depends on how the compiler allocates registers in
-`measureEchoTimes()`. That is why the function is
-`__attribute__((noinline, noclone, externally_visible))`: link-time
-optimisation cannot inline, clone or specialise it, so its loop compiles the
-same way whatever calls it.
-
-Re-count it whenever that function, the compiler or the build flags change: run
-`avr-objdump -d -C .pio/build/uno/firmware.elf` in `base-station/` (PlatformIO's
-copy is in `~/.platformio/packages/toolchain-atmelavr/bin/`), find the
-`in rX, 0x06` (the `PINC` read) in `UltrasonicSampling::measureEchoTimes(bool)`,
-and add up the loop path around it as in the table in `ultrasonic-sampling.h`.
-
-A `DEBUG` build compiles the loop differently (30 cycles per iteration, 63 with
-a transition), so `ultrasonic-sampling.h` sets `SAMPLING_LOOP_CYCLES` to 30 when
-`DEBUG` is defined: the sampling window still matches the set time, but a tick
-is 1.875 µs, so tick counts from a `DEBUG` build are not comparable with a
-normal build's. Use `DEBUG` for diagnostics, not for measurements.
-
-## Keep the sampling time shorter than the trigger period
-
-Sampling starts right after the base station's Timer1 compare match. A window
-longer than the trigger period would run into the next trigger pulse, which
-re-arms the receivers mid-measurement, so the sampling time is capped at
-`SAMPLING_WINDOW_MAX_PERCENT` (80 %) of the trigger period, computed from
-`timer1_top` (`UltrasonicSampling::maxSamplingTimeMs()`): 80 ms at 10 Hz, 40 ms
-at 20 Hz. `H` rejects anything longer, and a stored value above the cap (e.g.
-after raising the pulse rate) is clamped to it at boot. `setup()` therefore
-applies the sampling settings after starting Timer1.
+The transmitter station stores a new TOP in its EEPROM (address 0: magic
+`0x7A7E`, TOP, ~TOP) and resets through the watchdog, then boots at that rate.
+The link has no acknowledgements, so if all three copies are lost the
+transmitter stays at its old rate until the next `F`, `M` or base-station boot.
+**Both boards must be reflashed together**: an old transmitter ignores
+`PKT_RATE`, and boards at different rates give unusable timing.
 
 ## Echo pins must be on `PORTC` (`A0`–`A5`)
 
@@ -229,7 +213,7 @@ into a closed port.
 
 The base station's settings live in EEPROM, which `avrdude` does not touch on a
 normal upload, so a board keeps them (the burst delay found by `D`, the sampling
-time set with `H`, and all the others) across firmware versions. The defaults in
+time set with `H`, the trigger rate set with `F`, and all the others) across firmware versions. The defaults in
 `settings-eeprom.h` are only written on the first boot, when the stored record
 is missing, from other firmware, of another layout version or size, corrupted,
 or out of range. After that, editing a default and
@@ -299,13 +283,10 @@ already makes that unlikely.
   pins, sync interval, send guard, delay-search parameters, `R` behaviour,
   transition cap), and one that prints every stored setting, since there is
   currently no way to see most of what a board has stored.
-- Add a script (or a build step) that re-counts `SAMPLING_LOOP_CYCLES` from the
-  disassembly, so a code or compiler change cannot silently change the tick
-  length.
 - Upgrade the docs theme to
   [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/) by adding
   `mkdocs-material` to `docs/requirements.txt` and setting `theme.name: material`
   in `mkdocs.yml` (search, dark mode, better nav).
 - Document the calibration constants (`A` and `B`) once they are re-established
-  for the 1.125 µs tick, so the count-to-distance conversion lives alongside the
+  for the current firmware, so the count-to-distance conversion lives alongside the
   firmware that produces the counts.

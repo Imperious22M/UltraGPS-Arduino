@@ -6,11 +6,11 @@
 
 #include "ultrasonic-sampling.h"
 #include "debug_macros.h"
-#include "timers.h"   // timer1_top, used by the (disabled) TCNT1 timeout in measureEchoTimes()
+#include "timers.h"   // timer1_top and trigger_fired, used by the TCNT1 timeout in measureEchoTimes()
 
 UltrasonicSampling::UltrasonicSampling(uint16_t sampling_time_ms, uint8_t max_saved_ticks)
-    : _maxTicks(msToTicks(SAMPLING_TIME_MS)),
-      _samplingTimeMs(SAMPLING_TIME_MS),
+    : _samplingTimeMs(SAMPLING_TIME_MS),
+      _samplingCounts(msToCounts(SAMPLING_TIME_MS)),
       _maxSavedTicks(MAX_SAVED_TICKS),
       _echoMask(0),
       _value(),
@@ -47,18 +47,17 @@ void UltrasonicSampling::applySettings(const SettingsEeprom &settings) {
 }
 
 uint16_t UltrasonicSampling::maxSamplingTimeMs() {
-    // Timer1 not started yet (global construction): no rate to cap against
+    // Timer1 not started yet (global construction): no period to cap against
     if (timer1_top == 0) return SAMPLING_TIME_MAX_MS;
-    // Trigger period = (timer1_top + 1) Timer1 counts of 256 CPU cycles
-    const unsigned long period_ms = ((unsigned long)timer1_top + 1) * 256UL / CPU_CYCLES_PER_MS;
-    const unsigned long cap = period_ms * SAMPLING_WINDOW_MAX_PERCENT / 100;
-    return cap > SAMPLING_TIME_MAX_MS ? SAMPLING_TIME_MAX_MS : (uint16_t)cap;
+    const uint32_t cap_counts = ((uint32_t)timer1_top + 1) * SAMPLING_WINDOW_MAX_PERCENT / 100;
+    const uint32_t cap_ms = cap_counts * TIMER1_US_PER_COUNT / 1000;
+    return cap_ms > SAMPLING_TIME_MAX_MS ? SAMPLING_TIME_MAX_MS : (uint16_t)cap_ms;
 }
 
 bool UltrasonicSampling::setSamplingTimeMs(uint16_t ms) {
     if (ms < SAMPLING_TIME_MIN_MS || ms > maxSamplingTimeMs()) return false;
     _samplingTimeMs = ms;
-    _maxTicks = msToTicks(ms);
+    _samplingCounts = msToCounts(ms);
     return true;
 }
 
@@ -66,15 +65,8 @@ uint16_t UltrasonicSampling::getSamplingTimeMs() const {
     return _samplingTimeMs;
 }
 
-bool UltrasonicSampling::setMaxTicks(unsigned long ticks) {
-    if (ticks < msToTicks(SAMPLING_TIME_MIN_MS) || ticks > msToTicks(maxSamplingTimeMs())) return false;
-    _maxTicks = ticks;
-    _samplingTimeMs = ticksToMs(ticks);
-    return true;
-}
-
-unsigned long UltrasonicSampling::getMaxTicks() const {
-    return _maxTicks;
+uint16_t UltrasonicSampling::getSamplingCounts() const {
+    return _samplingCounts;
 }
 
 bool UltrasonicSampling::setMaxSavedTicks(uint8_t count) {
@@ -103,12 +95,8 @@ void UltrasonicSampling::updateEchoMask() {
     }
 }
 
-unsigned long UltrasonicSampling::msToTicks(uint16_t ms) {
-    return (unsigned long)ms * CPU_CYCLES_PER_MS / SAMPLING_LOOP_CYCLES;
-}
-
-uint16_t UltrasonicSampling::ticksToMs(unsigned long ticks) {
-    return (uint16_t)((ticks * SAMPLING_LOOP_CYCLES + CPU_CYCLES_PER_MS / 2) / CPU_CYCLES_PER_MS);
+uint16_t UltrasonicSampling::msToCounts(uint16_t ms) {
+    return (uint16_t)((uint32_t)ms * 1000UL / TIMER1_US_PER_COUNT);
 }
 
 unsigned long UltrasonicSampling::getTicks(uint8_t receiver) const {
@@ -128,8 +116,13 @@ void UltrasonicSampling::measureEchoTimes(bool noInterruptsFlag) {
     byte bits;
 
     // Copy the settings and the buffer addresses into locals so the sampling loop
-    // keeps them in registers instead of reloading them on every iteration
-    const unsigned long max_tick_val = _maxTicks;
+    // keeps them in registers instead of reloading them on every iteration.
+    // TCNT1 timeout: the sampling time in Timer1 counts, capped again here in
+    // case the trigger rate changed since it was set. These constants are worked
+    // out once, outside the loop.
+    const uint16_t      period       = timer1_top + 1;   // Timer1 counts per trigger period
+    const uint16_t      cap_counts   = (uint16_t)((uint32_t)period * SAMPLING_WINDOW_MAX_PERCENT / 100);
+    const uint16_t      limit        = _samplingCounts < cap_counts ? _samplingCounts : cap_counts;
     const unsigned int  max_saved    = _maxSavedTicks;
     const byte          echo_mask    = _echoMask;
     byte          *value = _value;
@@ -142,37 +135,39 @@ void UltrasonicSampling::measureEchoTimes(bool noInterruptsFlag) {
         noInterrupts();
     }
 
-    // Base sampling time around TCNT1 values. Only the TCNT1 timeout below uses
-    // it; it is still captured so the timeout can be uncommented as it was.
-    uint16_t base_tick = TCNT1;
-    (void)base_tick;
+    // Base sampling time around TCNT1 values
+    const uint16_t base_tick = TCNT1;
 
     // Sample the echo pins and only save the changes that the echo pins have made.
-    // One iteration is one tick (SAMPLING_LOOP_CYCLES CPU cycles).
-    for(my_ticks=0; my_ticks < max_tick_val; my_ticks++)
+    // Each change is timestamped with the Timer1 counts (16 us each) elapsed since
+    // base_tick, so the results do not depend on how fast the loop runs.
+    // my_ticks only counts loop passes (shown in the DEBUG output).
+    for(my_ticks=0; ; my_ticks++)
     {
+      // TCNT1 counts 0..timer1_top and restarts at the compare match, so add one
+      // period when it has wrapped since base_tick.
+      const uint16_t now = TCNT1;
+      const uint16_t elapsed = now >= base_tick ? now - base_tick : now + period - base_tick;
+
+      // TCNT1 timeout: stop once the sampling time has passed. Also stop if the
+      // next compare match has fired (trigger_fired is set by the Timer1 ISR): a
+      // long interrupt near the end could otherwise let TCNT1 wrap past
+      // base_tick and hide the timeout.
+      if (elapsed >= limit || trigger_fired) {
+        break;
+      }
+
       this_value = PINC & echo_mask;   // all echo lines in one read of PORTC
       if (this_value != previous_value)
       {
         value[nwp] = previous_value = this_value;
-        ticks[nwp++] = my_ticks;
+        ticks[nwp++] = elapsed;        // Timer1 counts since the start of sampling
 
         if (nwp >= max_saved) {
           break;
         }
 
       }
-
-      // TCNT1 timeout, disabled for now: the sampling time (setSamplingTimeMs())
-      // bounds the loop instead. Uncommenting the block below restores it as it
-      // was; SAMPLING_LOOP_CYCLES must then be re-counted.
-      // TODO: Move calculations constants out (LIKE TIMER1_TOP*0.8)
-      // TODO: Review the need for this! (Changing sampling time might be better)
-      // This loop breaks out of the sampling time early if 80% of TCNT1 clock cycles
-      // have passed.
-      // if((int)(TCNT1 - base_tick)%timer1_top >= (uint16_t)(timer1_top*0.8) ) {
-      //   break;
-      // }
 
     }
 
@@ -206,9 +201,6 @@ void UltrasonicSampling::measureEchoTimes(bool noInterruptsFlag) {
  // when all of them are set to high, which indicates the sensor is listening.
  for(i=max+1;i<nwp;i++)
  {
-   // Stop at a tick past the sampling window (the maximum tick count). The
-   // sampling loop never saves one, so this is only a safeguard.
-   if (ticks[i] > max_tick_val) break;
    // Which echo line fell (value[t-1] - value[t]). The subtraction, kept from
    // the original code, is only right while lines fall: a reading in which a
    // line rises can credit the wrong receiver.
