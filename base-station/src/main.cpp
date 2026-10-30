@@ -169,8 +169,8 @@ void setup()
 //! Called from loop() to keep the transmitter station's PLL in phase. A PKT_SYNC
 //! carries only the Timer1 value and never changes the burst delay stored on the
 //! transmitter, so it cannot interfere with a measurement.
-//! @note Meant to be called periodically, every sync interval (SYNC_PLL_INTERVAL by
-//!       default), but loop() currently calls it on every pass (see loop()).
+//! @note Called by loop() once per Timer1 cycle, in the second half of the cycle
+//!       (sync_due), away from the compare match.
 void syncPLL(){
     radioCtrl.sendSync(TCNT1);
 }
@@ -180,18 +180,17 @@ void syncPLL(){
 //! @brief Arduino main loop: run any complete serial command, send a PLL sync packet
 //!        and, in continuous mode, take the next measurement.
 //!
-//! @note The sync packets and the continuous measurements are meant to be spaced by
-//!       the stored sync interval (SYNC_PLL_INTERVAL by default) and by
-//!       continuousPollingDelay, but lastSyncTime and lastPulseTime are local, not
-//!       static, so in practice both happen on every pass. This known quirk is left
-//!       as it is on purpose (see docs/notes.md).
+//! One PLL sync packet is sent per Timer1 cycle, in the second half of the
+//! cycle (the ISR sets sync_due); continuous measurements are spaced by
+//! continuousPollingDelay using lastPulseTime below.
+void loop();
+
+//! millis() when loop() last started a continuous-mode measurement. File scope,
+//! so continuousPollingDelay is honoured between passes of loop().
+long lastPulseTime = 0;
+
 void loop()
 {
-    long currentTime = millis();
-    // Not static (the known quirk noted above loop()): both are 0 on every pass,
-    // so each interval check below is true once millis() reaches its interval.
-    long lastSyncTime = 0;
-    long lastPulseTime = 0;
 
     cmdCtrl.poll();
 
@@ -204,10 +203,21 @@ void loop()
         radioCtrl.sendRate(timer1_top, 1);
     }
 
-    // Periodic functions (timed with millis(), not delay())
-    if (millis() - lastSyncTime >= (unsigned int)settings.getSyncPllInterval()) {
-        syncPLL();
-        lastSyncTime = currentTime;
+    // One sync packet per Timer1 cycle: the compare-match ISR sets sync_due when
+    // TCNT1 restarts, and the packet goes out in the second half of the cycle,
+    // before the trigger send guard. That keeps it away from the transmitter's
+    // compare match, where its radio interrupt would delay the ultrasonic burst.
+    // It is sent from here, not from the ISR, because a radio write is too slow
+    // for an interrupt; it carries TCNT1 as read when sent, so the transmitter's
+    // phase correction stays exact. If loop() is busy (a measurement) through
+    // the window, the sync goes out in the next cycle's window.
+    if (sync_due) {
+        const uint16_t now = TCNT1;
+        if (now >= timer1_top / 2
+            && (uint16_t)(timer1_top - now) >= settings.getTriggerSendGuardTicks()) {
+            sync_due = false;
+            syncPLL();
+        }
     }
     if(cmdCtrl.pollingState == PollingState::CONTINUOUS) {
       if (millis() - lastPulseTime >= continuousPollingDelay) {

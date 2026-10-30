@@ -6,8 +6,8 @@ const int triggerPin = 5;
 volatile bool trigger_fired = false;
 //! Number of ticks in one full timer cycle (OCR1A+1)
 uint16_t timer1_top = 0;
-//! Trigger pulse duration in microseconds
-constexpr unsigned int TRIGGER_PULSE_US = 50;
+//! Trigger pulse duration in microseconds (the HC-SR04 needs at least 10 us)
+constexpr unsigned int TRIGGER_PULSE_US = 15;
 //! Tick delay in microseconds to apply to the trigger timing, as specified by the base station
 uint16_t tick_delay = 0;
 

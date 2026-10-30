@@ -150,6 +150,7 @@ pio run -d base-station --target upload
 | `E` | Stores the default burst delay (`SONIC_BURST_DELAY`, 2000 µs) again; replies `E: <delay>` |
 | `H <ms>` | Sets the echo sampling time in milliseconds (1 ms up to 80 % of the Timer1 period at the current trigger rate: 80 at 10 Hz, 40 at 20 Hz, 800 at 1 Hz; default 80) and stores it in EEPROM; replies `H: <ms>, <Timer1 counts>`, e.g. `H: 80, 5000`. An out-of-range value changes nothing |
 | `F <Hz>` | Sets the trigger (pulse) rate, 1–50 Hz (default 10), on **both** stations: stores it in EEPROM, restarts Timer1, sends the new rate to the transmitter (which stores it and resets) and caps the sampling time to 80 % of the new period; replies `F: <Hz>, <Timer1 TOP>, <sampling ms>`, e.g. `F: 20, 3124, 40` |
+| `B <baud>` | Sets the serial baud rate (e.g. 9600, 57600, 115200), stores it in EEPROM and switches at once; replies `B: <baud>` at the old rate. `M` (at the new rate) restores 38400 |
 | `M` | Resets every setting stored in EEPROM to its default; replies `M: OK` |
 
 Commands must be terminated with a newline or carriage return. Any `P`, `S`, `R`,

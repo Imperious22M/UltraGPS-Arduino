@@ -46,6 +46,7 @@ silently discarded (see [Invalid input](#invalid-input)).
 | `E` | Store the default burst delay, `SONIC_BURST_DELAY` (2000 µs), as the delay in force. Returns to polling mode. | One `E:` line |
 | `H <ms>` | Set the echo sampling time to `<ms>` milliseconds (1 ms up to 80 % of the Timer1 period at the current trigger rate — 80 at 10 Hz, 40 at 20 Hz; default 80), store it in EEPROM and apply it. Returns to polling mode. | One `H:` line |
 | `F <Hz>` | Set the trigger rate (1–50 Hz, default 10) on both stations: store it in EEPROM, restart Timer1, send it to the transmitter (which stores it and resets) and cap the sampling time to the new period. Returns to polling mode. | One `F:` line |
+| `B <baud>` | Set the serial baud rate (a rate `baudRateIsValid()` accepts, e.g. 9600, 57600, 115200), store it in EEPROM and switch to it at once. The reply goes out at the old rate; reconnect at the new one. Invalid rates change nothing. Returns to polling mode. | `B: <baud in force>` |
 | `M` | Reset every stored setting (burst delay, sampling time, trigger rate and the rest) to its default and apply it (the default rate is also sent to the transmitter). Returns to polling mode. | `M: OK` |
 
 !!! note "Line endings matter"
@@ -160,6 +161,22 @@ measurements after `F` may come back empty while it restarts and re-locks.
     A transmitter running older firmware does not know `PKT_RATE` and stays at
     10 Hz, and two boards at different rates give unusable timing. Reflash both
     boards together.
+
+### Setting the baud rate
+
+`B <baud>` changes the base station's serial baud rate at once and stores it in
+EEPROM, so it is used after every reset too. Accepted rates are 300, 600, 1200,
+2400, 4800, 9600, 14400, 19200, 28800, 38400, 57600, 115200, 250000, 500000 and
+1000000. The reply is sent at the **old** rate, then the port switches:
+
+```
+B 115200
+B: 115200
+```
+
+Reconnect the host (and the ground-station program) at the new rate. An invalid
+rate changes nothing and the reply shows the rate still in force. `M`, sent at
+the new rate, goes back to 38400.
 
 ### Restoring the default settings
 

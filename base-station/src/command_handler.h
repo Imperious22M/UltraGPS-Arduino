@@ -33,14 +33,13 @@ enum class PollingState : uint8_t {
 //!
 //! loop() calls CommandControl::runContinuous() only if at least this long has passed
 //! since the previous call.
-//! @note In practice this delay has no effect: loop() sets lastPulseTime to 0 on every
-//!       pass (the variable is not static), so after start-up the check always passes.
-//!       The rate is set by the wait for the next Timer1 trigger inside
+//! @note loop() keeps lastPulseTime between passes, so this delay is honoured, but
+//!       it is shorter than the trigger period. The rate is set by the wait for the
+//!       next Timer1 trigger inside
 //!       CommandControl::handleUltrasonics(): one measurement per trigger period
 //!       (10 per second at 10 Hz) while the sampling time, the trigger send guard
 //!       (TRIGGER_SEND_GUARD_TICKS, 2 ms by default) and the time to print and
 //!       send a sync packet fit in that period; otherwise one every two periods.
-//!       See "Interval timers in loop() are reset every iteration" in docs/notes.md.
 constexpr uint16_t continuousPollingDelay = 20;
 
 // ---------------------------------------------------------------------------

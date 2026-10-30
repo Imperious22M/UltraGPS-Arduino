@@ -25,6 +25,7 @@ CommandControl::CommandControl(RadioController& radio, LedControl& leds,
           { 'M', &_cmdSettingsReset },  // Reset every setting stored in EEPROM to its default
           { 'H', &_cmdSamplingTime },   // Set the ultrasonic sampling time in milliseconds
           { 'F', &_cmdTriggerRate },    // Set the trigger rate in Hz (both stations)
+          { 'B', &_cmdBaudRate },       // Set the serial baud rate
       }
 {
     // Command definitions: { type, number of arguments, argument types, callback }
@@ -42,6 +43,7 @@ CommandControl::CommandControl(RadioController& radio, LedControl& leds,
     _cmdSettingsReset = { CommandType::SETTINGS_RESET, 0, {}, &CommandControl::dispatch<&CommandControl::onResetSettings> };
     _cmdSamplingTime  = { CommandType::SAMPLING_TIME, 1, { ArgType::INT }, &CommandControl::dispatch<&CommandControl::onSetSamplingTime> };
     _cmdTriggerRate   = { CommandType::TRIGGER_RATE, 1, { ArgType::INT }, &CommandControl::dispatch<&CommandControl::onSetTriggerRate> };
+    _cmdBaudRate      = { CommandType::BAUD_RATE_SET, 1, { ArgType::INT }, &CommandControl::dispatch<&CommandControl::onSetBaudRate> };
     // Example of a command with an argument
     //_cmdSetDelay    = { CommandType::SET_DELAY, 1, { ArgType::INT }, &CommandControl::dispatch<&CommandControl::onSetDelay> };
 }
@@ -79,9 +81,7 @@ void CommandControl::handleUltrasonics(bool print, uint16_t delay_us) {
     // Reset the trigger flag to signal that the most recent trigger has been sent and
     // read, now that we are triggering at a set rate.
     resetTriggerFlag();
-    // Measure the echo times with interrupts left enabled (false): passing true
-    // would block the Timer1 ISR, and every other interrupt, while sampling.
-    _sampler.measureEchoTimes(false);
+    _sampler.measureEchoTimes(true);
     _leds.setPulseTrig(success);
 
     // Print only if enabled
@@ -320,6 +320,24 @@ void CommandControl::onSetTriggerRate(const CmdArg* args) {
     Serial.print(F("F: ")); Serial.print(_settings.getTriggerRateHz());
     Serial.print(F(", "));  Serial.print(timer1_top);
     Serial.print(F(", "));  Serial.println(_sampler.getSamplingTimeMs());
+}
+
+// 'B <baud>' — set the serial baud rate
+void CommandControl::onSetBaudRate(const CmdArg* args) {
+    DEBUG_INFO_PRINTLN("[CMD] Set baud rate");
+    pollingState = PollingState::POLLING;
+
+    const int32_t baud = args[0].i;
+    const bool valid = baud > 0 && SettingsEeprom::isValidBaudRate((uint32_t)baud);
+
+    // Reply at the current rate, before switching, so the host sees it
+    Serial.print(F("B: "));
+    Serial.println(valid ? (uint32_t)baud : _settings.getBaudRate());
+    Serial.flush();
+
+    if (valid) {
+        _settings.setBaudRate((uint32_t)baud);   // stores it and switches the port now
+    }
 }
 
 void CommandControl::applyTriggerRate() {

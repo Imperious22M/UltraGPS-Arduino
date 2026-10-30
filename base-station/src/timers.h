@@ -24,6 +24,9 @@
 extern const int triggerPin;
 //! Flag set by the TIMER1_COMPA ISR when the trigger fires; cleared by the code that waits for it.
 extern volatile bool trigger_fired;
+//! Set by the TIMER1_COMPA ISR when TCNT1 restarts (once per Timer1 cycle);
+//! loop() sends a PLL sync packet and clears it.
+extern volatile bool sync_due;
 //! @brief Timer1 TOP value (OCR1A), set by the timer1_init_*() functions.
 //!
 //! TCNT1 counts 0..timer1_top, so one full timer cycle is timer1_top + 1 ticks.

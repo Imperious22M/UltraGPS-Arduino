@@ -33,38 +33,23 @@ mechanism would work for these too; `debug_macros.h` is the awkward one because
 the shared radio code includes it from the project's `src/` (via
 `build_flags = -I src`) so that the debug level stays per-project.
 
-## Interval timers in `loop()` are reset every iteration
+## Sync packets and interval timers in `loop()`
 
-`base-station/src/main.cpp` declares its interval bookkeeping inside `loop()`:
+The base station sends one `PKT_SYNC` per Timer1 cycle: the compare-match ISR
+sets `sync_due` when `TCNT1` restarts, and `loop()` sends the packet in the
+second half of the cycle, before the trigger send guard, so the transmitter's
+radio interrupt never runs near its compare match and delays the burst. The radio write is done in `loop()`, not in the ISR, because it
+is too slow for an interrupt; the packet carries `TCNT1` as read when it is
+sent, so the transmitter's phase correction stays exact. If `loop()` is busy
+through the window, the sync goes out in the next cycle. The `SYNC_PLL_INTERVAL`
+setting is therefore not used. (Earlier versions sent a sync on every pass of
+`loop()`, because the interval variables were reset on every pass.)
 
-```cpp
-void loop()
-{
-    long currentTime = millis();
-    long lastSyncTime = 0;
-    long lastPulseTime = 0;
-    ...
-    if (millis() - lastSyncTime >= (unsigned int)settings.getSyncPllInterval()) { ... }
-```
-
-Because `lastSyncTime` and `lastPulseTime` are re-initialised to `0` on every
-pass, both comparisons are true on every pass once the board has been up for a
-few milliseconds. In practice:
-
-- `syncPLL()` sends a `PKT_SYNC` on **every loop iteration**, not every 10 ms
-  as the `SYNC_PLL_INTERVAL` setting suggests; the stored interval has no
-  effect. Harmless to the burst delay since sync packets no longer carry one,
-  but it is a lot of radio traffic.
-- In continuous mode, `continuousPollingDelay` (20 ms, `command_handler.h`) has
-  no effect. The real rate limit is the blocking `while(!trigger_fired){}` wait
-  inside `CommandControl::handleUltrasonics()`, which ties output to the Timer1
-  rate — about 10 lines per second at the default 10 Hz, as long as the
-  sampling time is shorter than the trigger period.
-
-Making the interval and the delay meaningful means declaring the two variables
-`static` (or moving them to file scope). Doing so would change the observed
-radio traffic and the continuous-mode rate, so it is a behavioural change, not a
-pure cleanup.
+`lastPulseTime` is at file scope, so `continuousPollingDelay` (20 ms,
+`command_handler.h`) applies between continuous-mode measurements. It is shorter
+than the trigger period, so the real limit is the blocking wait for the next
+Timer1 trigger inside `CommandControl::handleUltrasonics()`: about 10 lines per
+second at 10 Hz.
 
 ## `measureEchoTimes()` is called with interrupts enabled
 
@@ -180,7 +165,7 @@ so much as unfinished work:
   and never read.
 - **`TRIGGER_HIGH_DURATION`** (300 µs) is now a stored setting
   (`settings-eeprom.h`, 1–16383 µs, with a getter and a setter), but nothing
-  reads it; the actual pulse width is still `TRIGGER_PULSE_US` (50 µs) in
+  reads it; the actual pulse width is still `TRIGGER_PULSE_US` (15 µs) in
   `timers.cpp`.
 - **`radioIRQPin`** is declared on the base station but no interrupt is attached
   — only the transmitter uses its radio IRQ line.
@@ -248,8 +233,8 @@ so the change is lost at the next `applySettings()` or reset.
 
 The baud rate is a stored setting (`BAUD_RATE`, default 38400, a rate
 `baudRateIsValid()` accepts), and `setup()` opens the serial port at the stored
-rate on every boot. No command sets it yet, but `SettingsEeprom::setBaudRate()`
-switches the port immediately. If a future command stores a rate the host does not use,
+rate on every boot. `B <baud>` stores a new rate and switches the port
+immediately. If you set a rate the host does not use,
 the board answers only at that rate, after every reset. To recover, connect at
 the stored rate and send `M` (it replies `M: OK` at that rate, then switches to
 `BAUD_RATE`), or flash firmware with a different `SETTINGS_LAYOUT_VERSION`,

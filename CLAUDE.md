@@ -78,6 +78,7 @@ argument) get no reply.
 | `E` | Store `SONIC_BURST_DELAY` as the burst delay again | `E: <delay>` |
 | `H <ms>` | Sampling time 1 ms – 80 % of Timer1 period at current rate (80 ms at 10 Hz, 40 at 20, 800 at 1; ≤ 1000), stored + applied | `H: <ms>, <Timer1 counts>` e.g. `H: 80, 5000` |
 | `F <Hz>` | Trigger rate 1–50 Hz (default 10): stored, Timer1 restarted (`timer1_init(top)`), `PKT_RATE` sent 3×, stored sampling time set to 80 % of the new period | `F: <Hz>, <TOP>, <sampling ms>` e.g. `F: 20, 3124, 40` |
+| `B <baud>` | Baud rate (`baudRateIsValid()` list), stored + applied immediately; reply sent at the old rate | `B: <baud>` |
 | `M` | Every setting back to its default (EEPROM + RAM); also re-applies and sends the default rate | `M: OK` (sent before the defaults, incl. baud rate, are applied) |
 
 All of `D E H F M R P S` return to polling mode (end continuous mode).
@@ -132,7 +133,7 @@ a pending OCF1A, and the sampling loop also stops if `trigger_fired` is set.
 - Sampling time, echo pins and the transition cap are held twice
   (`SettingsEeprom` and `UltrasonicSampling`); call
   `UltrasonicSampling::applySettings()` after changing them (`H`, `F`, `M`, `setup()` do).
-- Only `D`, `E`, `H`, `F`, `M` reach setters. No command sets the baud rate etc. yet.
+- Only `D`, `E`, `H`, `F`, `B`, `M` reach setters.
 
 ## Sampling (`ultrasonic-sampling.*`) — read before touching `measureEchoTimes()`
 
@@ -164,8 +165,12 @@ Session of 2026-10-07:
 - Radio code is shared as a PlatformIO library under `shared/`, kept as C++.
 - `D` letter chosen by the user; `E` was my pick for restore.
 - Search scoring: zeros excluded; more valid readings wins; ties → lower mean.
-- `syncPLL()` still fires every loop iteration (interval vars are not `static`);
-  known, documented in `docs/notes.md`, left alone deliberately.
+- `syncPLL()` runs once per Timer1 cycle: the compare-match ISR sets
+  `sync_due`, `loop()` sends the packet in the second half of the cycle, before
+  the send guard, away from the transmitter's compare match (user's request).
+  Trigger pulse is 15 µs on both stations. The
+  `SYNC_PLL_INTERVAL` setting is now unused. `lastPulseTime` is at file scope,
+  so `continuousPollingDelay` is honoured.
 
 Session of 2026-10-28/29 (four tasks the user listed, done in order):
 1. `settings-eeprom` module + `M`. File names follow the user's hyphenated
@@ -209,7 +214,6 @@ checks still owed:
 
 - Serial commands for the other setters (baud rate, search range, …).
 - Move `timers`, `led_control`, `debug_macros` into `shared/` too.
-- Make `lastSyncTime`/`lastPulseTime` static so the intervals mean something.
 - Have the ground-station program send `D`/`E`/`H`/`F`/`M` and parse the replies.
 
 ## Conventions

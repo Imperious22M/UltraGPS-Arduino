@@ -12,13 +12,16 @@
 const int triggerPin = 5;
 // Flag set by the TIMER1_COMPA ISR when the trigger fires
 volatile bool trigger_fired = false;
+//! Flag set by the TIMER1_COMPA ISR each time TCNT1 restarts; loop() sends a PLL sync packet and clears it.
+volatile bool sync_due = false;
 // Timer1 TOP value (OCR1A), set by the timer1_init_*() functions
 uint16_t timer1_top = 0;
 //! @brief Trigger pulse duration in microseconds.
 //!
-//! The HC-SR04 datasheet only says we need 10 us, but I am using 50 us to be
-//! safe: https://cdn.sparkfun.com/datasheets/Sensors/Proximity/HCSR04.pdf
-constexpr uint16_t TRIGGER_PULSE_US = 50;
+//! The HC-SR04 datasheet only says we need 10 us; 15 us leaves some margin
+//! (same as the transmitter station):
+//! https://cdn.sparkfun.com/datasheets/Sensors/Proximity/HCSR04.pdf
+constexpr uint16_t TRIGGER_PULSE_US = 15;
 // Burst delay in microseconds, stored by pllCorrect(); the ISR below does not apply it
 uint16_t tick_delay = 0;
 
@@ -71,5 +74,6 @@ ISR(TIMER1_COMPA_vect) {
     delayMicroseconds(TRIGGER_PULSE_US);
     digitalWrite(triggerPin, LOW);
     trigger_fired = true;
+    sync_due = true;   // one PLL sync packet per Timer1 cycle (sent from loop())
 }
 

@@ -92,7 +92,7 @@ first build.
    the base station keeps the PLL locked with `PKT_SYNC` packets, which carry
    the same timer value but leave the stored delay alone.
 4. Both boards' Timer1 reach compare-match. Each `TIMER1_COMPA_vect` ISR pulses
-   its trigger pin (pin 5) for 50 µs and sets `trigger_fired`. On the
+   its trigger pin (pin 5) for 15 µs and sets `trigger_fired`. On the
    transmitter that pulse fires the ultrasonic burst, while on the receiver it triggers
    the receive functionality of the receivers.
 5. The base station, released from its `while(!trigger_fired)` wait, runs

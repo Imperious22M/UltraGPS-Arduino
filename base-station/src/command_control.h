@@ -38,6 +38,7 @@ enum class CommandType : uint8_t {
     SETTINGS_RESET, //!< 'M' — reset every setting stored in EEPROM to its default.
     SAMPLING_TIME,  //!< 'H' — set the ultrasonic sampling time in milliseconds.
     TRIGGER_RATE,   //!< 'F' — set the trigger rate (Timer1 frequency) in Hz, on both stations.
+    BAUD_RATE_SET,  //!< 'B' — set the serial baud rate (stored, applied immediately).
     UNKNOWN,        //!< Not a command; no command definition uses it.
 };
 
@@ -72,7 +73,7 @@ public:
 
 private:
     //! Number of entries in _cmdTable (a 9th initializer fails to compile).
-    static constexpr uint8_t CMD_COUNT = 9;
+    static constexpr uint8_t CMD_COUNT = 10;
 
     RadioController&    _radio;     //!< Radio link to the transmitter station.
     LedControl&         _leds;      //!< Status LEDs.
@@ -92,6 +93,7 @@ private:
     CommandDef _cmdSettingsReset;  //!< The 'M' command.
     CommandDef _cmdSamplingTime;   //!< The 'H' command.
     CommandDef _cmdTriggerRate;    //!< The 'F' command.
+    CommandDef _cmdBaudRate;       //!< The 'B' command.
 
     //! @}
 
@@ -297,6 +299,19 @@ private:
     //! F: <rate in force (Hz)>, <Timer1 TOP>, <sampling time in force (ms)>
     //! @endcode
     void onSetTriggerRate(const CmdArg* args);
+    //! @brief 'B': set the serial baud rate, store it in EEPROM and switch to it.
+    //!
+    //! Sent as `B <baud>` with a rate baudRateIsValid() accepts (300 ... 1000000,
+    //! 230400 excluded). The reply goes out at the OLD rate, then the port
+    //! switches, so reconnect the host at the new rate. The rate is kept across
+    //! resets; 'M' (sent at the new rate) restores BAUD_RATE (38400). An invalid
+    //! rate changes nothing and the reply shows the rate still in force.
+    //! @param args `args[0].i` is the baud rate.
+    //! @par Reply
+    //! @code
+    //! B: <baud rate in force after the command>
+    //! @endcode
+    void onSetBaudRate(const CmdArg* args);
     //! @brief Restart Timer1 at the stored trigger rate, send it to the
     //!        transmitter station and re-apply the sampling settings.
     void applyTriggerRate();

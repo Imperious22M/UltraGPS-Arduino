@@ -44,7 +44,7 @@ range fails to compile.
 | Setting | Default | Accepted range | Changed over serial by |
 |---------|---------|----------------|------------------------|
 | `ECHO_PIN[]` | `A0`–`A5` | `A0`–`A5` each | — |
-| `BAUD_RATE` | `38400` | a rate `baudRateIsValid()` accepts ([below](#baud-rates)) | — |
+| `BAUD_RATE` | `38400` | a rate `baudRateIsValid()` accepts ([below](#baud-rates)) | `B <baud>` |
 | `SYNC_PLL_INTERVAL` | `10` ms | 1–60000 ms | — |
 | `SONIC_BURST_DELAY` (burst delay) | `2000` µs | 1–16383 µs | `D` stores the delay it finds, `E` stores the default |
 | `TRIGGER_SEND_GUARD_TICKS` | `125` Timer1 ticks | 0–3124 | — |
@@ -116,8 +116,8 @@ out (3.5 % off). The function is a single expression rather than a table, so it
 also works in a `static_assert` and uses no RAM; a `BAUD_RATE` it rejects fails
 to compile.
 
-No serial command sets the baud rate yet. `SettingsEeprom::setBaudRate()`, there
-for a future command, accepts only these rates and switches the port at once.
+The `B <baud>` command sets it at run time: it accepts only these rates, stores
+the new rate and switches the port at once (the reply goes out at the old rate).
 
 ## PlatformIO project settings
 
@@ -223,12 +223,12 @@ default, and the board uses the value stored on it.
 | Setting | File | Default | Meaning |
 |---------|------|---------|---------|
 | `triggerPin` | `timers.cpp` (both) | `5` | Pin pulsed by the Timer1 ISR |
-| `TRIGGER_PULSE_US` | `timers.cpp` (both) | `50` | Trigger pulse width. The HC-SR04 datasheet requires 10 µs; 50 µs is a safety margin. |
+| `TRIGGER_PULSE_US` | `timers.cpp` (both) | `15` | Trigger pulse width. The HC-SR04 datasheet requires 10 µs; 15 µs leaves a margin. |
 | `SONIC_BURST_DELAY` | `settings-eeprom.h` (base) | `2000` | **Default** burst delay: microseconds the transmitter waits after its compare match before firing, giving the receivers time to settle into receive mode. `D` stores the delay it finds in its place; `E` stores this default again. |
 | `BURST_DELAY_MIN_US` / `MAX_US` | `settings-eeprom.h` (base) | `1` / `16383` | Range the stored burst delay must fall in: 0 is reserved (see below), and 16383 µs is the longest delay the Arduino core's `delayMicroseconds()` produces correctly, a software limit (see `tick_delay` below) |
 | `TRIGGER_SEND_GUARD_TICKS` | `settings-eeprom.h` (base) | `125` | A trigger packet is not sent within this many Timer1 ticks (2 ms) of the compare match; the handler waits for the next cycle instead, so the transmitter never fires with a stale delay. At most 3124 (`TRIGGER_SEND_GUARD_MAX_TICKS`, one period at 20 Hz). |
 | `tick_delay == 0` | `sendTrigger()` (shared) | reserved | A trigger with a zero delay is refused by the base station and ignored by the transmitter. `SEARCH_DELAY_MIN_US = 0` is therefore measured as 1 µs. |
-| `SYNC_PLL_INTERVAL` | `settings-eeprom.h` (base) | `10` | Milliseconds between PLL sync packets (1–60000). In practice one is sent on every pass of `loop()`, whose interval bookkeeping is reset on each pass. |
+| `SYNC_PLL_INTERVAL` | `settings-eeprom.h` (base) | `10` | Stored but not used at present: one PLL sync packet is sent per Timer1 cycle, in the second half of the cycle before the trigger send guard. |
 | `tick_delay` | `timers.cpp` (transmitter) | set by radio | Applied as `delayMicroseconds()` at the top of the ISR. Limited to 16383 µs by the Arduino core, not by the hardware: at 16 MHz `delayMicroseconds()` multiplies its argument by 4 in 16-bit arithmetic, so a larger value overflows and gives a wrong, usually far shorter, delay. |
 
 ## Sampling window

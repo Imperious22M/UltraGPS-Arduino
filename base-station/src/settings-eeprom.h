@@ -62,8 +62,8 @@ constexpr uint32_t BAUD_RATE  = 38400;
 
 //! @brief How often to send a sync packet to the transmitter station to
 //!        synchronize its PLL (milliseconds).
-//! @note Almost no effect at present: loop() sends a sync packet on every pass
-//!       once millis() reaches the interval (a known quirk, see loop() in main.cpp).
+//! @note Not used at present: loop() sends one sync packet per Timer1 cycle,
+//!       in the second half of the cycle. Kept as a stored setting.
 constexpr unsigned long SYNC_PLL_INTERVAL = 10;
 
 //! @}
@@ -409,9 +409,6 @@ public:
     //! @brief Set the interval between PLL sync packets (milliseconds).
     //! @param ms SYNC_PLL_INTERVAL_MIN to SYNC_PLL_INTERVAL_MAX.
     //! @return true if stored; false, and nothing changes, if @p ms is out of range.
-    //! @note Almost no effect at present: loop() sends a sync packet on every pass
-    //!       once millis() reaches the interval (a known quirk, see loop() in
-    //!       main.cpp).
     bool setSyncPllInterval(unsigned long ms);
 
     //! @brief Set the burst delay in force (microseconds).

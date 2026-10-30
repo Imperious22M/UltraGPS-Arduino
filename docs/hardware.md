@@ -29,7 +29,7 @@ the echo pins, `base-station/src/settings-eeprom.h`.
 | `2` | — | Radio IRQ — **declared but unused** | `main.cpp` (`radioIRQPin`) |
 | `3` | OUT | `STAT_1` LED | `LedControl leds(3, 4, 6, 7, 8)` |
 | `4` | OUT | `STAT_2` LED | " |
-| `5` | OUT | Trigger pulse (50 µs, fired by the Timer1 ISR) | `timers.cpp` (`triggerPin`) |
+| `5` | OUT | Trigger pulse (15 µs, fired by the Timer1 ISR) | `timers.cpp` (`triggerPin`) |
 | `6` | OUT | `STAT_3` LED | `LedControl` |
 | `7` | OUT | `PULSE_TRIG` LED — lit while a pulse is in flight | " |
 | `8` | OUT | `RADIO_STATUS` LED — solid once the radio initialises | " |
@@ -59,7 +59,7 @@ Defined in `transmitter-station/src/main.cpp` and
 | `2` | IN | Radio `IRQ` — `attachInterrupt(..., FALLING)` drives `onRadioIRQ()` |
 | `3` | OUT | `STAT_1` LED |
 | `4` | OUT | `STAT_2` LED |
-| `5` | OUT | Trigger to the ultrasonic transmitter (50 µs pulse) |
+| `5` | OUT | Trigger to the ultrasonic transmitter (15 µs pulse) |
 | `6` | OUT | `STAT_3` LED |
 | `7` | OUT | `PULSE_TRIG` LED |
 | `8` | OUT | `RADIO_STATUS` LED |
