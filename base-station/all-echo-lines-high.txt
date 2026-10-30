@@ -1,0 +1,75 @@
+The "all echo lines high" error in UltrasonicSampling::measureEchoTimes()
+=========================================================================
+
+Where
+-----
+base-station/src/ultrasonic-sampling.cpp, the reduction step after the
+sampling loop (carried over unchanged from the original measure_echo_times()):
+
+    for(max=i=0;i<nwp;i++)
+    {
+      if (value[i] >= value[max]) max = i;
+    }
+
+value[] holds the PINC reading (the six echo lines, A0-A5 = bits 0-5) after
+each change seen during sampling. The tick search afterwards starts at
+value[max+1].
+
+What the code is meant to do
+----------------------------
+Each receiver pulls its echo line HIGH when it starts listening and LOW when
+the ultrasonic burst arrives. The intended start point is the moment ALL echo
+lines are high (PINC & mask == 0x3F with six receivers). From there, the tick
+at which each line falls is that receiver's time of flight.
+
+What it actually does
+---------------------
+It does not look for "all lines high". It takes the NUMERICALLY LARGEST PINC
+value seen, and with ">=" the LAST occurrence of it. Those are not the same
+thing:
+
+1. Higher pins outweigh lower ones.
+   A5 alone high = 0x20 = 32. A0-A4 all high = 0x1F = 31.
+   So a lone A5 pulse counts as "more high" than five receivers listening.
+   Example sequence:  0x3F -> 0x3E -> 0x3C -> 0x20 (A5 glitch) -> ...
+   The real start is 0x3F, but if a later 0x3F never appears and the A5
+   glitch is the largest value after a partial set, the start point can land
+   on the wrong sample. Falls that happened before it are ignored and those
+   receivers report 0.
+
+2. A receiver that never goes high (unplugged, dead, not triggered).
+   The all-high value 0x3F never occurs. The code then uses whatever the
+   largest value was (e.g. 0x1F), which may or may not be a sensible start;
+   which sample "wins" depends on bit weights, not on timing.
+
+3. The LAST maximum wins.
+   If the lines all go high twice inside one window (e.g. a second trigger
+   pulse, or a glitch that briefly restores 0x3F), the start point jumps to
+   the second occurrence and the earlier, real falls are discarded. The
+   sampling-window cap (80 % of the trigger period) prevents the second-
+   trigger case, but not glitches.
+
+Consequence
+-----------
+Usually harmless with six healthy receivers, because the readings rise to
+0x3F once and then only fall. With noise, a missing receiver, or a glitch, a
+receiver can silently report 0 or a time taken from the wrong reference.
+
+Possible fix (not applied - it changes measurement results)
+-----------------------------------------------------------
+Use the FIRST sample in which every configured echo line is high:
+
+    const byte all_high = echo_mask;      // e.g. 0x3F
+    for (max = 0; max < nwp; max++)
+        if ((value[max] & all_high) == all_high) break;
+    if (max == nwp) { /* never all high: report all 0 or fall back */ }
+
+If missing receivers must still be measured, a more robust approach is to
+track, per receiver, its own rising edge and then its next falling edge.
+
+A related quirk: the fallen line is found with value[i-1] - value[i]
+(subtraction), which is wrong whenever a line rises on the same read another
+falls; value[i-1] & ~value[i] is the correct "lines that went low" mask.
+
+The host differential test harness (scratch copy from the 2026-10-29
+session) can confirm a fix only changes results in these cases.

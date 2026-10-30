@@ -56,14 +56,11 @@ A successful upload ends with `[SUCCESS]` and an `avrdude` verification line.
 
 ## Upload with arduino-cli
 
-`arduino-cli` can build and flash the PlatformIO source tree directly, because
-the sketches are plain C++ under `src/`:
-
-```bash
-arduino-cli compile --upload -p /dev/ttyACM0 -b arduino:avr:uno base-station/src
-```
-
-To flash a prebuilt `.hex` from a release without compiling anything:
+`arduino-cli` cannot build these sketches: `arduino-cli compile` needs a `.ino`
+file, which `src/` does not have, and the `shared/` libraries are only found
+through PlatformIO's `lib_extra_dirs`. Build with PlatformIO (above). What
+`arduino-cli` can do is flash a firmware image: a prebuilt `.hex` from a
+release, or the `firmware.hex` PlatformIO writes to `<project>/.pio/build/uno/`:
 
 ```bash
 arduino-cli upload -p /dev/ttyACM0 -b arduino:avr:uno \
@@ -77,6 +74,6 @@ arduino-cli upload -p /dev/ttyACM0 -b arduino:avr:uno \
 | `Permission denied: /dev/ttyACM0` | Your user is not in the `dialout` group — see [Installation](installation.md) |
 | `avrdude: stk500_recv(): programmer is not responding` | Wrong port, or a serial monitor still holds the port open. Close it and retry. |
 | `RADIO_STATUS` blinks slowly and never goes solid | `radio.begin()` or `isChipConnected()` failed — check the nRF24 wiring and its power supply |
-| Upload succeeds, serial prints nothing | Monitor is at the wrong baud rate; the sketches use 38400 |
-| `P` returns all zeros | The transmitter station is not firing — confirm it is powered, flashed, and its radio LED is solid |
+| Upload succeeds, serial prints nothing | Monitor is at the wrong baud rate. The sketches use 38400 by default; the base station's rate is a setting stored in EEPROM, which survives uploads — if it was changed, connect at that rate and send `M` |
+| `P` returns all zeros | The transmitter station is not firing — confirm it is powered, flashed, and its radio LED is solid. If it is, check the sampling time (`H`): it must be long enough to catch the echoes but shorter than the trigger period (100 ms at 10 Hz); `H 80` restores the default |
 | Garbled serial output | Baud mismatch, or `DEBUG` was left enabled in `debug_macros.h` and is interleaving diagnostics with data |

@@ -21,7 +21,8 @@ radio IRQ line, which only the transmitter station uses.
 
 ## Pin map — base station
 
-Defined in `base-station/src/main.cpp` and `base-station/src/timers.cpp`.
+Defined in `base-station/src/main.cpp`, `base-station/src/timers.cpp` and, for
+the echo pins, `base-station/src/settings-eeprom.h`.
 
 | Pin | Direction | Signal | Set in |
 |-----|-----------|--------|--------|
@@ -37,11 +38,16 @@ Defined in `base-station/src/main.cpp` and `base-station/src/timers.cpp`.
 | `11` | OUT | SPI `MOSI` → radio | Hardware SPI |
 | `12` | IN | SPI `MISO` ← radio | " |
 | `13` | OUT | SPI `SCK` → radio | " |
-| `A0`–`A5` | IN (pull-up) | Echo lines from receivers 0–5 | `ECHO_PIN[]` |
+| `A0`–`A5` | IN (pull-up) | Echo lines from receivers 0–5 | `ECHO_PIN[]` (`settings-eeprom.h`), stored in EEPROM |
 
-The six echo lines **must** stay on `A0`–`A5`: `measure_echo_times()` reads them
-as a group with `PINC & 63`, which is a direct read of `PORTC`'s low six bits.
-Moving a receiver to a digital pin would silently drop it from the measurement.
+The six echo lines **must** stay on `A0`–`A5`: `UltrasonicSampling::measureEchoTimes()`
+samples them all with a single read of the `PINC` register (`PORTC`'s low six
+bits). Within `A0`–`A5` the receiver-to-pin mapping is a setting: `ECHO_PIN[]`
+gives each receiver's pin, and each receiver's result follows its pin. Any other
+pin is rejected, at compile time for the `ECHO_PIN[]` defaults and by
+`SettingsEeprom::setEchoPin()` at run time. No serial command changes the
+mapping yet: edit `ECHO_PIN[]`, reflash, then send `M`, which resets every
+stored setting to its default (the stored settings survive reflashing).
 
 ## Pin map — transmitter station
 

@@ -27,16 +27,18 @@ arduino-cli upload -p /dev/ttyACM1 -b arduino:avr:uno \
 ```
 
 Take care to send each image to the right board — see
-[Uploading](uploading.md) for how to tell them apart, and
-[Configuration](configuration.md) if you need to change a setting (which does
-require building from source).
+[Uploading](uploading.md) for how to tell them apart. The base station keeps its
+settings in EEPROM, which flashing does not erase; its burst delay and sampling
+time can be changed over serial, and `M` restores the defaults (see
+[Usage](usage.md)). Changing any other setting requires building from source
+(and, for a base-station setting, sending `M` after flashing) — see
+[Configuration](configuration.md).
 
 ## Prerequisites for building from source
 
 - **PlatformIO Core** (`pio`) — the primary toolchain; each project is a
   PlatformIO project. Needs Python 3.
-- **`arduino-cli`** — optional, only needed for the `base-station/upload`
-  helper script and for flashing loose `.hex` files.
+- **`arduino-cli`** — optional, only needed for flashing loose `.hex` files.
 - **`git`** — to clone the repository.
 
 The AVR compiler toolchain and the `RF24` library are downloaded automatically
@@ -67,7 +69,7 @@ arduino-cli core install arduino:avr
 
 ### Serial port permissions (Linux)
 
-The Arduino's usually appears as `/dev/ttyACM<some number>` Your user must be in the
+The Arduino usually appears as `/dev/ttyACM<n>` (or `/dev/ttyUSB<n>` on CH340 clones). Your user must be in the
 `dialout` group to open it:
 
 ```bash

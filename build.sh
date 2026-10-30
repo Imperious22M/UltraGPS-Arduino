@@ -58,14 +58,37 @@ Examples:
 EOF
 }
 
-# Ensure PlatformIO is available before running a firmware command.
+# Make a working PlatformIO Core ("pio") available, in this order:
+#   1. a pio already on PATH that actually runs;
+#   2. PlatformIO's own installer location (~/.platformio/penv);
+#   3. a private virtual environment in the repo (.venv-platformio), created
+#      and filled with "pip install platformio" on first use.
+# A pio that is present but broken is skipped: e.g. Ubuntu 24.04's apt package
+# (platformio 4.3.4) crashes with the click 8.1 the distro ships
+# ("'PlatformioCLI' object has no attribute 'resultcallback'").
+PIO_VENV="$PROJECT_DIR/.venv-platformio"
+
+pio_works() { command -v pio >/dev/null 2>&1 && pio --version >/dev/null 2>&1; }
+
 require_pio() {
-    if ! command -v pio >/dev/null 2>&1; then
-        echo "error: 'pio' (PlatformIO Core) is not installed." >&2
-        echo "Install it with:" >&2
-        echo "    python3 -m venv ~/.venvs/platformio" >&2
-        echo "    ~/.venvs/platformio/bin/pip install platformio" >&2
-        echo "    export PATH=\"\$HOME/.venvs/platformio/bin:\$PATH\"" >&2
+    pio_works && return
+    if [[ -x "$HOME/.platformio/penv/bin/pio" ]]; then
+        export PATH="$HOME/.platformio/penv/bin:$PATH"
+        pio_works && return
+    fi
+    if [[ ! -x "$PIO_VENV/bin/pio" ]]; then
+        echo ">> No working PlatformIO found; installing it into $PIO_VENV ..."
+        if ! python3 -m venv "$PIO_VENV"; then
+            echo "error: could not create a Python virtual environment." >&2
+            echo "On Debian/Ubuntu install it with: sudo apt install python3-venv" >&2
+            exit 1
+        fi
+        "$PIO_VENV/bin/pip" install --quiet --upgrade pip
+        "$PIO_VENV/bin/pip" install --quiet platformio
+    fi
+    export PATH="$PIO_VENV/bin:$PATH"
+    if ! pio_works; then
+        echo "error: PlatformIO in $PIO_VENV does not run; delete that folder and retry." >&2
         exit 1
     fi
 }

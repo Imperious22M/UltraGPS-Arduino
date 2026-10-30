@@ -38,11 +38,14 @@ for the pin map, configuration reference, command set, and design notes.
 ```bash
 git clone https://github.com/Imperious22M/UltraGPS-Arduino.git
 cd UltraGPS-Arduino
-
-python3 -m venv ~/.venvs/platformio
-~/.venvs/platformio/bin/pip install platformio
-export PATH="$HOME/.venvs/platformio/bin:$PATH"
+./build.sh build
 ```
+
+`build.sh` needs only `python3` with the `venv` module (`sudo apt install
+python3-venv` on Debian/Ubuntu). It uses a working `pio` if you have one;
+otherwise it installs PlatformIO into `.venv-platformio/` in the repository on
+first use. Ubuntu's apt `platformio` package (4.3.4) is skipped automatically:
+it crashes with the `click` version Ubuntu 24.04 ships.
 
 On Linux your user must be in the `dialout` group to reach the serial port:
 
@@ -74,7 +77,10 @@ Example response (may be all 0's if no receiver towers are connected):
 N: 4404, 3226, 4063, 4041, 3133, 4109
 ```
 
-Each value is one receiver's tick count, in `A0`–`A5` order.
+Each value is one receiver's tick count, in `A0`–`A5` order. A tick is one pass
+of the base station's sampling loop, 1.125 µs. Earlier firmware (including
+v1.0) counted ticks of about 29 µs, so counts are now about 26× larger and any
+`Ax + B` calibration must be redone.
 
 ## Using the build script
 
@@ -136,14 +142,18 @@ pio run -d base-station --target upload
 | Command | Effect |
 |---------|--------|
 | `P` | Fire one pulse and print one normal command `N:` |
-| `C` | Enter continuous mode — a stream of continous responses `C:` |
+| `C` | Enter continuous mode — a stream of continuous responses `C:` |
 | `S` | Simulates a `P` command and prints **simulated** counts |
-| `R` | Resets the transmitter station over the radio, replies `N: R`, then resets the base station |
-| `D` | Sweeps the burst delay 0–500 µs, prints the best one as a `D:` line, and stores it in EEPROM for future measurements (takes ~15 s) |
-| `E` | Clears the stored burst delay and goes back to the compiled-in default; replies `E: <delay>` |
+| `R` | Resets the transmitter station over the radio and replies `N: R`. The base station keeps running unless `RESET_SELF_AFTER_REMOTE_RESET` is set (off by default) |
+| `D` | Sweeps the burst delay (0–500 µs by default), prints one `D:` line per step and then the best one, and stores it in EEPROM for future measurements (takes ~15 s) |
+| `E` | Stores the default burst delay (`SONIC_BURST_DELAY`, 2000 µs) again; replies `E: <delay>` |
+| `H <ms>` | Sets the echo sampling time in milliseconds (1 ms up to 80 % of the trigger period, i.e. 80 at 10 Hz; default 80) and stores it in EEPROM; replies `H: <ms>, <max ticks>`, e.g. `H: 80, 71111`. An out-of-range value changes nothing |
+| `M` | Resets every setting stored in EEPROM to its default; replies `M: OK` |
 
-Commands must be terminated with a newline or carriage return. Any `P`, `S` or `R` command ends
-continuous mode.
+Commands must be terminated with a newline or carriage return. Any `P`, `S`, `R`,
+`D`, `E`, `H` or `M` command ends continuous mode. Keep the sampling time below
+the trigger period (100 ms at 10 Hz): a longer window runs into the next trigger
+pulse, so its readings are not meaningful.
 
 ### Building the release artefacts
 
@@ -162,16 +172,25 @@ Produces the two `.hex` images and a zip of the sketch sources, named from the
 
 ## Configuration
 
-All configuration are compile-time:
+The base station's own settings (burst delay, sampling time, baud rate, echo
+pins, the `D` sweep, the `R` behaviour and more) are stored in its **EEPROM**.
+Their defaults are in `base-station/src/settings-eeprom.h`; the first boot
+writes them, and `D`, `E`, `H` and `M` change them at runtime. EEPROM survives
+reflashing, so after editing a default, send `M` (or change
+`SETTINGS_LAYOUT_VERSION`) for the board to use it. Everything else, including
+every transmitter-station setting, is compile-time: rebuild and re-upload to
+change it.
 
 | Setting | Where |
 |---------|-------|
 | Serial port used for upload/monitor | `<project>/platformio.ini` |
-| Baud rate (38400) | `BAUD_RATE` in `<project>/src/main.cpp` **and** `monitor_speed` |
+| Baud rate (38400) | Base station: `BAUD_RATE` default in `base-station/src/settings-eeprom.h`, stored in EEPROM. Transmitter: `BAUD_RATE` in `transmitter-station/src/main.cpp`. **And** `monitor_speed` |
+| Burst delay (2000 µs) | The `D` and `E` commands, stored in EEPROM; default `SONIC_BURST_DELAY` in `base-station/src/settings-eeprom.h` |
+| Sampling time (80 ms) | The `H <ms>` command, stored in EEPROM; default `SAMPLING_TIME_MS` in `base-station/src/settings-eeprom.h` |
 | Pulse rate (10 Hz) | the `timer1_init_*Hz()` call in `setup()` — **Needs change on both boards** |
 | Radio channel, power, pipes | `shared/radio/radio.h` and `RadioController::init()` in `shared/radio/radio.cpp` — **shared by both boards** |
 | Debug output | `#define DEBUG` / `INFO_DEBUG` in `<project>/src/debug_macros.h` |
-| Simulated data | the `S` command, or `SIMULATE_REAL_COMMANDS` in `base-station/src/main.cpp` |
+| Simulated data | the `S` command, or `SIMULATE_REAL_COMMANDS` in `base-station/src/command_control.h` |
 
 See the **[Configuration](https://imperious22m.github.io/UltraGPS-Arduino/configuration/)**
 page for the complete reference.

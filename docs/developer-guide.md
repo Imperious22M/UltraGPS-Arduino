@@ -28,11 +28,14 @@ UltraGPS positioning system:
 ```bash
 git clone https://github.com/Imperious22M/UltraGPS-Arduino.git
 cd UltraGPS-Arduino
-
-python3 -m venv ~/.venvs/platformio
-~/.venvs/platformio/bin/pip install platformio
-export PATH="$HOME/.venvs/platformio/bin:$PATH"
+./build.sh build
 ```
+
+`build.sh` needs only `python3` with the `venv` module (`sudo apt install
+python3-venv` on Debian/Ubuntu). It uses a working `pio` if you have one;
+otherwise it installs PlatformIO into `.venv-platformio/` in the repository on
+first use. Ubuntu's apt `platformio` package (4.3.4) is skipped automatically:
+it crashes with the `click` version Ubuntu 24.04 ships.
 
 ## Flashing a prebuilt release
 
@@ -101,7 +104,7 @@ which.
 ./build.sh monitor -s base
 ```
 
-Then send `P`, `C`, `S`, `R`, `D`, or `E` — see [Usage](usage.md).
+Then send `P`, `C`, `S`, `R`, `D`, `E`, `H <ms>` or `M` — see [Usage](usage.md).
 
 ### Building the release artefacts
 
@@ -131,23 +134,26 @@ your changes before running it.
 ### Project layout
 
 ```
-shared/                 libraries compiled into BOTH projects
+shared/                    libraries compiled into BOTH projects
   radio/
-    radio.*             nRF24L01+ setup, pipe addresses, CommsPacket framing
-    library.json        declares the RF24 dependency
+    radio.*                nRF24L01+ setup, pipe addresses, CommsPacket framing
+    library.json           declares the RF24 dependency
   sysreset/
-    sysreset.h          watchdog-based software reset
+    sysreset.h             watchdog-based software reset
 base-station/
-  platformio.ini        board, ports, libraries, lib_extra_dirs = ../shared
+  platformio.ini           board, ports, libraries, lib_extra_dirs = ../shared
   src/
-    main.cpp            setup/loop, command table, echo measurement
-    command_control.*   serial line buffering and dispatch
-    delay_store.*       EEPROM record for the burst delay found by 'D'
-    timers.*            Timer1 CTC setup, TIMER1_COMPA ISR, PLL correction
-    led_control.*       status LEDs
-    debug_macros.h      compile-time-gated printing
+    main.cpp               global objects, setup(), syncPLL(), loop()
+    command_handler.*      CommandHandler: line buffering, decoding, dispatch
+    command_control.*      CommandControl: the command set and its handlers
+    settings-eeprom.*      SettingsEeprom: setting defaults, ranges, EEPROM storage
+    ultrasonic-sampling.*  UltrasonicSampling: echo sampling loop, tick counts
+    timers.*               Timer1 CTC setup, TIMER1_COMPA ISR, PLL correction
+    led_control.*          status LEDs
+    debug_macros.h         compile-time-gated printing
 transmitter-station/
-  ...                   the same, minus command_control.*
+  ...                      the same, minus command_*, settings-eeprom.* and
+                           ultrasonic-sampling.*
 ```
 
 !!! note "Radio code is shared; the other modules are still copies"
@@ -158,15 +164,94 @@ transmitter-station/
     `debug_macros.h` are still per-project copies, and a change to one does not
     reach the other.
 
+### Code comments
+
+The base-station sources and the `shared/` libraries use Doxygen-style
+comments: an `@file` block at the top of each file, `//!` blocks with `@brief`,
+`@param` and `@return` before declarations, `//!<` after a member, and plain
+`//` inside function bodies. Keep new code in the same style.
+
+### Base-station settings
+
+`settings-eeprom.h` holds the default and the accepted range of every
+base-station setting, and `SettingsEeprom` stores the settings in the
+ATmega328P's EEPROM with a RAM copy. `setup()` calls `settings.begin()` before
+`Serial.begin()`: it loads the stored record, or writes the defaults when there
+is no valid one — on the first boot, or when the record comes from other
+firmware, has another layout version, fails its CRC or holds an out-of-range
+value. Getters return the RAM copy; setters check the range, then write EEPROM
+and RAM together, and are only called by commands.
+
+- EEPROM survives reflashing, so **editing a default has no effect on a board
+  that already holds a valid record** until `M` is sent or
+  `SETTINGS_LAYOUT_VERSION` is changed.
+- Change `SETTINGS_LAYOUT_VERSION` whenever the stored fields change; a board
+  holding a record with another version rewrites it with the defaults on its
+  next boot.
+- `UltrasonicSampling` keeps its own copy of the sampling time, echo pins and
+  transition cap. After changing one of those settings, call
+  `sampler.applySettings(settings)`, as `H` and `M` do.
+- `setBaudRate()` switches the serial port at once, and the stored rate is used
+  on every boot. No command calls it yet; if one ever stores a rate the host
+  does not use, recover by connecting at that rate and sending `M`, or by
+  flashing firmware with a different `SETTINGS_LAYOUT_VERSION`.
+
+### Adding a command
+
+`CommandHandler` (`command_handler.*`) buffers serial lines, looks up the first
+letter in a command table, parses the arguments and calls the command's
+callback; it knows nothing about the commands themselves. The base station's
+command set is `CommandControl` (`command_control.*`), derived from it. To add a
+command:
+
+1. Add a value to the `CommandType` enum in `command_control.h`.
+2. Add a `CommandDef` member and a private handler
+   `void onSomething(const CmdArg* args)` to `CommandControl`. Like every
+   handler except `C`'s, it should set `pollingState = PollingState::POLLING`
+   so that it ends continuous mode.
+3. In the `CommandControl` constructor, fill in the definition (argument count,
+   `ArgType`s and `&CommandControl::dispatch<&CommandControl::onSomething>`)
+   and add the letter to `_cmdTable`. `H` (`_cmdSamplingTime`) is an example
+   with one integer argument.
+4. Raise `CMD_COUNT` to the new number of table entries.
+
+Then add the command to the tables in `README.md` and [Usage](usage.md).
+
+### Sampling-loop timing
+
+A tick is one iteration of the sampling loop in
+`UltrasonicSampling::measureEchoTimes()`. The sampling time is converted to a
+tick limit with `SAMPLING_LOOP_CYCLES` in `ultrasonic-sampling.h`: 18 CPU cycles
+per iteration, so one tick is 1.125 µs. That number was counted from the
+compiled loop (avr-gcc 7.3.0, `-Os`, LTO), so **re-count it whenever
+`measureEchoTimes()`, the compiler or the build flags change** — the comment
+above the constant shows how, with `avr-objdump`. Keep the function's
+`__attribute__((noinline, noclone, externally_visible))`: it stops link-time
+optimisation from compiling the loop differently for different callers.
+Un-commenting the TCNT1 timeout in the loop would add several hundred cycles per
+iteration.
+
+The conversion is approximate: each saved transition adds 26 uncounted cycles,
+interrupts stay enabled while sampling (the `millis()` interrupt alone stretches
+real time by about 0.6 %), and the Uno's ceramic resonator is not exactly
+16 MHz.
+
 ### Debugging
 
-Uncomment `#define DEBUG` (or `#define INFO_DEBUG`) in the relevant project's
-`debug_macros.h` and rebuild. Remember that diagnostics share the serial port
+Uncomment `#define DEBUG` in the relevant project's `debug_macros.h` (or, for
+the status messages only, add `#define INFO_DEBUG` next to it) and rebuild. Remember that diagnostics share the serial port
 with the measurement output, so anything parsing that output will choke — see
 [Configuration](configuration.md).
 
+On the base station, `DEBUG` also adds prints to `measureEchoTimes()`, which
+changes how its loop compiles: 30 cycles per iteration instead of 18.
+`SAMPLING_LOOP_CYCLES` follows (`#ifdef DEBUG` in `ultrasonic-sampling.h`), so
+the sampling window still matches the set time, but a tick is 1.875 µs and
+`DEBUG` tick counts are not comparable with a normal build's — see
+[Sampling-loop timing](#sampling-loop-timing).
+
 For testing the serial protocol without working ultrasonic hardware, use the
-`S` command or the `SIMULATE_REAL_COMMANDS` macro.
+`S` command or the `SIMULATE_REAL_COMMANDS` macro in `command_control.h`.
 
 ## Previewing the documentation
 
